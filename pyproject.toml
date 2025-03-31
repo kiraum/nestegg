@@ -1,0 +1,70 @@
+[project]
+name = "nestegg"
+version = "0.0.1"
+description = "A FastAPI application to compare Brazilian investment indexes"
+authors = [
+    {name = "kiraum", email = "tfgoncalves@xpto.it"},
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
+    "python-dateutil",
+    "pytz",
+    "click",
+    "backoff",
+    "uv",
+    "pytest",
+    "black",
+    "ruff",
+    "mypy",
+    "pytest-asyncio",
+    "respx",
+    "pytest-cov",
+    "isort",
+    "pylint",
+    "pre-commit",
+    "flake8",
+    "typer",
+]
+requires-python = ">=3.9"
+
+[project.scripts]
+nestegg = "nestegg.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "UP"]
+
+[tool.pylint.messages_control]
+disable = [
+    "R0913", # too-many-arguments
+    "R0917", # too-many-positional-arguments
+    "R0914", # too-many-locals
+    "R0915", # too-many-statements
+    "R0911", # too-many-return-statements
+    "R0903", # too-few-public-methods
+    "R0912", # too-many-branches
+]
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.flake8]
+ignore = ["W503"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.black]
+line-length = 120
+target-version = ["py39"]
