@@ -5,13 +5,13 @@ A FastAPI application that helps you compare different Brazilian investment inde
 ## Features
 
 - Compare returns between different investment types:
-  - Poupança
-  - SELIC Treasury Bonds
+  - Poupança (tax-free savings account)
+  - SELIC Treasury Bonds (with optional spread: SELIC+X%)
   - CDB (Certificado de Depósito Bancário)
-  - LCI (Letra de Crédito Imobiliário)
-  - LCA (Letra de Crédito do Agronegócio)
-  - IPCA (Inflation-indexed investments)
-  - CDI (Certificado de Depósito Interbancário)
+  - LCI (Letra de Crédito Imobiliário, tax-free)
+  - LCA (Letra de Crédito do Agronegócio, tax-free)
+  - IPCA (Inflation-indexed investments with optional spread: IPCA+X%)
+  - CDI (Certificado de Depósito Interbancário with optional percentage: X% of CDI)
 - Automatic tax calculation based on investment type and period
 - Real-time data from Brazilian Central Bank API
 - Easy-to-use REST API
@@ -45,9 +45,13 @@ A FastAPI application that helps you compare different Brazilian investment inde
      "amount": 10000.0,
      "start_date": "2024-03-01",
      "end_date": "2024-12-31",
-     "cdb_rate": 12.5,
-     "period_years": 0.82
+     "cdb_rate": 12.5
    }
+   ```
+
+4. Or compare multiple investments at once with:
+   ```bash
+   curl -X POST "http://localhost:8000/api/v1/compare?amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
    ```
 
 ## API Documentation
@@ -76,28 +80,112 @@ Response:
 
 ### POST /api/v1/calculate
 
-Calculate investment returns for different Brazilian investment types.
+Calculate investment returns for a single Brazilian investment type.
 
-Request body:
-```json
-{
-  "investment_type": "cdb|poupanca|selic|lci|lca",
-  "amount": float,
-  "start_date": "YYYY-MM-DD",
-  "end_date": "YYYY-MM-DD",
-  "cdb_rate": float (optional, required only for CDB),
-  "period_years": float (investment period in years)
-}
-```
+Request parameters:
+- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`)
+- `amount`: Initial investment amount
+- `start_date`: Start date (format: `YYYY-MM-DD`)
+- `end_date`: End date (format: `YYYY-MM-DD`)
+- `cdb_rate`: CDB rate as percentage (required for CDB investments)
+- `lci_rate`: LCI rate as percentage (required for LCI investments)
+- `lca_rate`: LCA rate as percentage (required for LCA investments)
+- `ipca_spread`: IPCA spread in percentage points (optional, default: 0)
+- `selic_spread`: SELIC spread in percentage points (optional, default: 0)
+- `cdi_percentage`: CDI percentage (optional, default: 100.0)
 
 Response:
 ```json
 {
-  "gross_profit": 1000.0,
-  "tax_amount": 150.0,
-  "net_profit": 850.0,
-  "effective_rate": 8.5
+  "investment_type": "cdb",
+  "initial_amount": 10000.0,
+  "final_amount": 11000.0,
+  "gross_profit": 1200.0,
+  "net_profit": 1000.0,
+  "tax_amount": 200.0,
+  "effective_rate": 10.0,
+  "start_date": "2024-03-01",
+  "end_date": "2024-12-31",
+  "rate": 12.5,
+  "tax_info": {
+    "tax_rate_percentage": 17.5,
+    "tax_amount": 200.0,
+    "is_tax_free": false,
+    "tax_period_days": 305,
+    "tax_period_description": "181 to 360 days (20% tax)"
+  }
 }
+```
+
+### POST /api/v1/compare
+
+Compare returns between different investment types and provide recommendations.
+
+Request parameters:
+- `amount`: Initial investment amount
+- `start_date`: Start date (format: `YYYY-MM-DD`)
+- `end_date`: End date (format: `YYYY-MM-DD`)
+- `cdb_rate`: CDB rate as percentage (optional)
+- `lci_rate`: LCI rate as percentage (optional)
+- `lca_rate`: LCA rate as percentage (optional)
+- `ipca_spread`: IPCA spread in percentage points (optional, default: 0)
+- `selic_spread`: SELIC spread in percentage points (optional, default: 0)
+- `cdi_percentage`: CDI percentage (optional, default: 100.0)
+
+Response:
+```json
+[
+  {
+    "type": "LCI",
+    "rate": 12.0,
+    "effective_rate": 12.0,
+    "gross_profit": 1200.0,
+    "net_profit": 1200.0,
+    "tax_amount": 0.0,
+    "final_amount": 11200.0,
+    "tax_free": true,
+    "tax_info": {
+      "tax_rate_percentage": 0.0,
+      "tax_amount": 0.0,
+      "is_tax_free": true,
+      "tax_period_days": 365,
+      "tax_period_description": "181 to 360 days (20% tax)"
+    },
+    "recommendation": "Best option among compared investments"
+  },
+  {
+    "type": "CDB",
+    "rate": 14.5,
+    "effective_rate": 11.6,
+    "gross_profit": 1450.0,
+    "net_profit": 1160.0,
+    "tax_amount": 290.0,
+    "final_amount": 11160.0,
+    "tax_free": false,
+    "tax_info": {
+      "tax_rate_percentage": 20.0,
+      "tax_amount": 290.0,
+      "is_tax_free": false,
+      "tax_period_days": 365,
+      "tax_period_description": "181 to 360 days (20% tax)"
+    },
+    "recommendation": "0.40% lower than LCI"
+  }
+]
+```
+
+## Example curl Commands
+
+Here are some example curl commands for using the API:
+
+### Calculate a single CDB investment
+```bash
+curl -X POST "http://localhost:8000/api/v1/calculate?investment_type=cdb&amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5"
+```
+
+### Compare multiple investments with custom parameters
+```bash
+curl -X POST "http://localhost:8000/api/v1/compare?amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
 ```
 
 ## Data Sources
