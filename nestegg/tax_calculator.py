@@ -27,6 +27,7 @@ class TaxCalculator:
         gross_profit: float,
         investment_period_days: int,
         cdb_rate: Optional[float] = None,
+        initial_amount: Optional[float] = None,
     ) -> float:
         """
         Calculate tax amount for investment returns.
@@ -36,6 +37,7 @@ class TaxCalculator:
             gross_profit: Gross profit before taxes
             investment_period_days: Number of days the investment is held
             cdb_rate: CDB rate (required only for CDB investments)
+            initial_amount: Initial investment amount (required for BTC calculations)
 
         Returns:
             Tax amount to be deducted from gross profit
@@ -58,6 +60,36 @@ class TaxCalculator:
         ):
             logger.debug("No tax for %s investment", investment_type)
             return 0.0
+
+        # Bitcoin - special tax rules in Brazil
+        # Exempt if total monthly sales <= R$ 35,000
+        # Otherwise, 15% tax on gains
+        if investment_type == InvestmentType.BTC:
+            if initial_amount is None:
+                raise ValueError("Initial amount is required for Bitcoin tax calculations")
+
+            # No tax on capital losses
+            if gross_profit <= 0:
+                logger.debug("Bitcoin has a capital loss - no tax applies")
+                return 0.0
+
+            # The total sale amount is the final value (initial + profit)
+            sale_amount = initial_amount + gross_profit
+
+            if sale_amount <= 35000:
+                logger.debug(
+                    "Bitcoin sale amount (R$ %.2f) below R$ 35,000 monthly threshold - tax exempt",
+                    sale_amount,
+                )
+                return 0.0
+
+            tax_amount = gross_profit * 0.15
+            logger.debug(
+                "Bitcoin sale amount (R$ %.2f) exceeds R$ 35,000 monthly threshold - 15%% tax: R$ %.2f",
+                sale_amount,
+                tax_amount,
+            )
+            return tax_amount
 
         # CDB and CDI taxes
         if investment_type in (InvestmentType.CDB, InvestmentType.CDI):
@@ -95,13 +127,21 @@ class TaxCalculator:
 
         raise ValueError(f"Unsupported investment type: {investment_type}")
 
-    def calculate_tax_rate(self, investment_type: InvestmentType, days: int) -> float:
+    def calculate_tax_rate(
+        self,
+        investment_type: InvestmentType,
+        days: int,
+        initial_amount: Optional[float] = None,
+        gross_profit: Optional[float] = None,
+    ) -> float:
         """
         Calculate the tax rate based on investment type and holding period.
 
         Args:
             investment_type: Type of investment
             days: Number of days the investment is held
+            initial_amount: Initial investment amount (needed for BTC calculations)
+            gross_profit: Gross profit (needed for BTC calculations to determine sale amount)
 
         Returns:
             Tax rate as a decimal (e.g., 0.15 for 15%)
@@ -113,6 +153,37 @@ class TaxCalculator:
             InvestmentType.LCA,
         ):
             return 0.0
+
+        # Bitcoin - special tax rules in Brazil
+        # Exempt if total monthly sales <= R$ 35,000
+        # Otherwise, progressive tax rates based on profit amount
+        if investment_type == InvestmentType.BTC:
+            # No tax on capital losses
+            if gross_profit is not None and gross_profit <= 0:
+                return 0.0
+
+            if initial_amount is None:
+                # Default to lowest taxable rate if no amount info
+                return 0.15
+
+            # Calculate sale amount if we have both initial_amount and gross_profit
+            if gross_profit is not None:
+                sale_amount = initial_amount + gross_profit
+                if sale_amount <= 35000:
+                    return 0.0
+
+                # For sales > R$ 35,000, apply progressive rates based on profit
+                if gross_profit <= 5_000_000:  # Up to R$ 5 million
+                    return 0.15
+                if gross_profit <= 10_000_000:  # R$ 5M to R$ 10M
+                    return 0.175
+                if gross_profit <= 30_000_000:  # R$ 10M to R$ 30M
+                    return 0.20
+                # Above R$ 30M
+                return 0.225
+
+            # Default if we can't determine profit amount
+            return 0.15
 
         # CDB, SELIC, IPCA, and CDI taxes
         if investment_type in (

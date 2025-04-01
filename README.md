@@ -12,8 +12,12 @@ A FastAPI application that helps you compare different Brazilian investment inde
   - LCA (Letra de Crédito do Agronegócio, tax-free)
   - IPCA (Inflation-indexed investments with optional spread: IPCA+X%)
   - CDI (Certificado de Depósito Interbancário with optional percentage: X% of CDI)
+  - Bitcoin (BTC) with real market prices from CryptoCompare API
 - Automatic tax calculation based on investment type and period
-- Real-time data from Brazilian Central Bank API
+- Historical data from Brazilian Central Bank API
+- Future projections based on historical volatility and trends
+- Bitcoin price data from CryptoCompare API
+- Robust error handling and logging
 - Easy-to-use REST API
 
 ## Installation
@@ -33,10 +37,10 @@ A FastAPI application that helps you compare different Brazilian investment inde
 
 1. Start the server:
    ```bash
-   uvicorn nestegg.main:app --reload
+   uvicorn nestegg.main:app --reload --port 8001
    ```
 
-2. Open your browser and navigate to `http://localhost:8000/docs` to access the interactive API documentation
+2. Open your browser and navigate to `http://localhost:8001/docs` to access the interactive API documentation
 
 3. Make a POST request to `/api/v1/calculate` with a JSON body like:
    ```json
@@ -51,7 +55,7 @@ A FastAPI application that helps you compare different Brazilian investment inde
 
 4. Or compare multiple investments at once with:
    ```bash
-   curl -X POST "http://localhost:8000/api/v1/compare?amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+   curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
    ```
 
 ## API Documentation
@@ -83,7 +87,7 @@ Response:
 Calculate investment returns for a single Brazilian investment type.
 
 Request parameters:
-- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`)
+- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`)
 - `amount`: Initial investment amount
 - `start_date`: Start date (format: `YYYY-MM-DD`)
 - `end_date`: End date (format: `YYYY-MM-DD`)
@@ -133,46 +137,10 @@ Request parameters:
 - `cdi_percentage`: CDI percentage (optional, default: 100.0)
 
 Response:
-```json
-[
-  {
-    "type": "LCI",
-    "rate": 12.0,
-    "effective_rate": 12.0,
-    "gross_profit": 1200.0,
-    "net_profit": 1200.0,
-    "tax_amount": 0.0,
-    "final_amount": 11200.0,
-    "tax_free": true,
-    "tax_info": {
-      "tax_rate_percentage": 0.0,
-      "tax_amount": 0.0,
-      "is_tax_free": true,
-      "tax_period_days": 365,
-      "tax_period_description": "181 to 360 days (20% tax)"
-    },
-    "recommendation": "Best option among compared investments"
-  },
-  {
-    "type": "CDB",
-    "rate": 14.5,
-    "effective_rate": 11.6,
-    "gross_profit": 1450.0,
-    "net_profit": 1160.0,
-    "tax_amount": 290.0,
-    "final_amount": 11160.0,
-    "tax_free": false,
-    "tax_info": {
-      "tax_rate_percentage": 20.0,
-      "tax_amount": 290.0,
-      "is_tax_free": false,
-      "tax_period_days": 365,
-      "tax_period_description": "181 to 360 days (20% tax)"
-    },
-    "recommendation": "0.40% lower than LCI"
-  }
-]
-```
+- A sorted list of investment comparisons, with the best performing investments first
+- Includes tax calculations and effective rates for each investment type
+- Provides a recommendation highlighting the best option
+- Clearly marks calculations for historical data vs. projected future returns
 
 ## Example curl Commands
 
@@ -180,21 +148,35 @@ Here are some example curl commands for using the API:
 
 ### Calculate a single CDB investment
 ```bash
-curl -X POST "http://localhost:8000/api/v1/calculate?investment_type=cdb&amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5"
+curl -X POST "http://localhost:8001/api/v1/calculate?investment_type=cdb&amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5"
 ```
 
 ### Compare multiple investments with custom parameters
 ```bash
-curl -X POST "http://localhost:8000/api/v1/compare?amount=10000&start_date=2025-03-31&end_date=2026-03-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+```
+
+### Compare investments with future dates (projections)
+```bash
+curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2025-01-01&end_date=2025-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
 ```
 
 ## Data Sources
 
-The application uses the Brazilian Central Bank API (BCB) to fetch current rates for:
-- SELIC rate
-- CDI rate
-- IPCA (inflation) rate
+The application uses the following data sources:
+
+1. Brazilian Central Bank API (BCB)
+   - SELIC rate (BCB series code 11)
+   - CDI rate (BCB series code 12)
+   - IPCA (inflation) rate (BCB series code 433)
+   - Poupança rate (BCB series code 25)
+
+2. CryptoCompare API
+   - Current and historical Bitcoin prices in BRL
+   - Future Bitcoin price projections based on historical volatility
+
+For future dates, the application uses sophisticated projections based on historical data patterns and volatility. These projections are clearly marked in the results.
 
 ## License
 
-MIT License
+See [LICENSE](https://raw.githubusercontent.com/kiraum/nestegg/refs/heads/main/LICENSE) file for details.

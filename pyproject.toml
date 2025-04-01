@@ -53,6 +53,7 @@ disable = [
     "R0911", # too-many-return-statements
     "R0903", # too-few-public-methods
     "R0912", # too-many-branches
+    "C0302", # too-many-lines
 ]
 
 [tool.pylint.format]

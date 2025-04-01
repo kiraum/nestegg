@@ -32,6 +32,7 @@ class InvestmentType(CaseInsensitiveEnum):
     POUPANCA = "poupanca"
     IPCA = "ipca"
     CDI = "cdi"
+    BTC = "btc"
 
 
 class InvestmentRequest(BaseModel):

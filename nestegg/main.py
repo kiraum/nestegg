@@ -3,6 +3,8 @@ Main FastAPI application module.
 """
 
 import logging
+import os
+import sys
 from datetime import date
 from typing import Optional
 
@@ -13,16 +15,28 @@ from fastapi.responses import JSONResponse
 
 from .calculator import InvestmentCalculator
 from .config import API_CONFIG, CORS_CONFIG, INVESTMENT_DESCRIPTIONS, setup_logging
+from .external_api import CryptoApiClient
 from .models import (
     InvestmentRequest,
     InvestmentResponse,
     InvestmentType,
 )
 
-# Setup logging
-setup_logging()
+# Check if debug mode is enabled via command line arguments or environment variable
+debug_mode = "--debug" in sys.argv or os.environ.get("DEBUG", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+# Setup logging with the appropriate debug level
+setup_logging(debug=debug_mode)
 
 logger = logging.getLogger(__name__)
+if debug_mode:
+    logger.info("Debug logging enabled")
+else:
+    logger.info("Debug logging disabled (use --debug to enable)")
 
 # Create API router with prefix and tags
 api_router = APIRouter(
@@ -45,6 +59,7 @@ class AppState:
     """Holds application state including calculator instance."""
 
     calculator = None
+    crypto_client = None
 
 
 APP_STATE = AppState()
@@ -54,7 +69,16 @@ APP_STATE = AppState()
 async def startup_event():
     """Initialize the calculator on startup."""
     logger.info("Starting up NestEgg API")
-    APP_STATE.calculator = InvestmentCalculator()
+
+    # Create a single crypto client instance to be shared across all requests
+    APP_STATE.crypto_client = CryptoApiClient()
+    # Mark this instance as shared so calculators don't close it
+    APP_STATE.crypto_client.is_shared = True
+    logger.info("Initialized shared crypto client for consistent pricing data")
+
+    # Create the calculator with the shared crypto client
+    APP_STATE.calculator = InvestmentCalculator(crypto_client=APP_STATE.crypto_client)
+    logger.info("Initialized calculator with shared crypto client")
 
 
 @app.on_event("shutdown")
@@ -64,6 +88,9 @@ async def shutdown_event():
     if APP_STATE.calculator:
         await APP_STATE.calculator.close()
         logger.info("Closed calculator resources")
+    if APP_STATE.crypto_client:
+        await APP_STATE.crypto_client.close()
+        logger.info("Closed shared crypto client")
 
 
 @app.exception_handler(RequestValidationError)
@@ -131,9 +158,10 @@ async def list_investment_types():
     * Investment period
     * Current market rates from BCB
     * Applicable taxes based on investment type and period
+    * For Bitcoin, real market prices from CoinGecko API
 
     For CDB investments, you must provide the CDB rate.
-    For other investment types, the rate is fetched from BCB.
+    For other investment types, the rate is fetched from BCB or CoinGecko.
     """,
     response_description="Calculated investment returns including taxes",
 )
@@ -145,18 +173,24 @@ async def calculate_investment(
     cdb_rate: Optional[float] = None,
     lci_rate: Optional[float] = None,
     lca_rate: Optional[float] = None,
+    ipca_spread: float = 0.0,
+    selic_spread: float = 0.0,
+    cdi_percentage: float = 100.0,
 ) -> InvestmentResponse:
     """
     Calculate investment returns for different Brazilian investment types.
 
     Args:
-        investment_type: Type of investment (POUPANCA, SELIC, CDB, LCI, LCA)
+        investment_type: Type of investment (POUPANCA, SELIC, CDB, LCI, LCA, IPCA, CDI, BTC)
         amount: Initial investment amount
         start_date: Start date for the investment period
         end_date: End date for the investment period
         cdb_rate: CDB rate as percentage (e.g., 12.5 for 12.5%)
         lci_rate: LCI rate as percentage (e.g., 11.0 for 11.0%)
         lca_rate: LCA rate as percentage (e.g., 10.5 for 10.5%)
+        ipca_spread: IPCA spread in percentage points (e.g., 5.0 for IPCA+5%)
+        selic_spread: SELIC spread in percentage points (e.g., 3.0 for SELIC+3%)
+        cdi_percentage: CDI percentage (e.g., 109.0 for 109% of CDI)
 
     Returns:
         InvestmentResponse with calculated values
@@ -189,6 +223,9 @@ async def calculate_investment(
             cdb_rate=cdb_rate,
             lci_rate=lci_rate,
             lca_rate=lca_rate,
+            ipca_spread=ipca_spread,
+            selic_spread=selic_spread,
+            cdi_percentage=cdi_percentage,
             start_date=start_date,
             end_date=end_date,
         )
@@ -199,7 +236,7 @@ async def calculate_investment(
             )
         return await APP_STATE.calculator.calculate_investment(request)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=f"Failed to calculate investment: {str(e)}") from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
@@ -219,6 +256,7 @@ async def calculate_investment(
     * CDB (if rate provided)
     * LCI (if rate provided)
     * LCA (if rate provided)
+    * Bitcoin (always included, using real market prices from CoinGecko)
 
     Results are sorted by effective rate and include tax implications.
     """,
@@ -271,7 +309,8 @@ async def compare_investments(
             period_years,
         )
         logger.info(
-            "Rates - CDB: %.1f%%, LCI: %.1f%%, LCA: %.1f%%, IPCA+%.1f%%, SELIC+%.1f%%, %.1f%% of CDI",
+            "Rates - CDB: %.1f%%, LCI: %.1f%%, LCA: %.1f%%, IPCA+%.1f%%, "
+            "SELIC+%.1f%%, %.1f%% of CDI, BTC: using real prices",
             cdb_rate or 0,
             lci_rate or 0,
             lca_rate or 0,
@@ -281,9 +320,15 @@ async def compare_investments(
         )
         logger.info("Using date range: %s to %s", start_date, end_date)
 
-        # Create a new calculator instance with the specified date range
-        calc = InvestmentCalculator(start_date=start_date, end_date=end_date)
-        results = await calc.compare_investments(
+        # Use the shared calculator instance instead of creating a new one
+        if APP_STATE.calculator is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Calculator not initialized. Please try again later.",
+            )
+
+        # Call compare_investments with the date parameters
+        results = await APP_STATE.calculator.compare_investments(
             initial_amount=amount,
             period_years=period_years,
             cdb_rate=cdb_rate,
@@ -292,6 +337,8 @@ async def compare_investments(
             ipca_spread=ipca_spread,
             selic_spread=selic_spread,
             cdi_percentage=cdi_percentage,
+            start_date_param=start_date,
+            end_date_param=end_date,
         )
 
         return results
