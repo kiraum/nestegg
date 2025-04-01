@@ -70,8 +70,14 @@ class InvestmentRequest(BaseModel):
     @classmethod
     def validate_rate(cls, v, info):
         """Validate the rate is positive if provided."""
-        if v is not None and v <= 0:
-            raise ValueError(f"{info.field_name} must be positive if provided")
+        if v is not None:
+            field_name = info.field_name
+            # For spread parameters, allow zero values
+            if field_name in ("ipca_spread", "selic_spread") and v < 0:
+                raise ValueError(f"{field_name} must be non-negative if provided")
+            # For all other rate parameters, require positive values
+            if field_name not in ("ipca_spread", "selic_spread") and v <= 0:
+                raise ValueError(f"{field_name} must be positive if provided")
         return v
 
     @field_validator("end_date")

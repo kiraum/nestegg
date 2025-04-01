@@ -719,7 +719,9 @@ class InvestmentCalculator:
                     "tax_amount": tax_amount,
                     "is_tax_free": is_tax_free,
                     "tax_period_days": int(request.period_years * 365),
-                    "tax_period_description": self._get_tax_period_description(int(request.period_years * 365)),
+                    "tax_period_description": self._get_tax_period_description(
+                        int(request.period_years * 365), request.investment_type
+                    ),
                 },
             }
 
@@ -729,8 +731,17 @@ class InvestmentCalculator:
             logger.error("Error calculating investment: %s", str(e))
             raise ValueError(f"Failed to calculate investment: {str(e)}") from e
 
-    def _get_tax_period_description(self, days: int) -> str:
-        """Get a description of the tax period based on days."""
+    def _get_tax_period_description(self, days: int, investment_type: InvestmentType) -> str:
+        """Get a description of the tax period based on days and investment type."""
+        # For tax-free investments, don't show taxable periods
+        if investment_type in (
+            InvestmentType.POUPANCA,
+            InvestmentType.LCI,
+            InvestmentType.LCA,
+        ):
+            return "Tax-free investment"
+
+        # For taxable investments, show the appropriate tax period
         if days <= 180:
             return "Up to 180 days (22.5% tax)"
         if days <= 360:
