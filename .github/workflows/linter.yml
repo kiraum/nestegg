@@ -1,7 +1,9 @@
----
 name: Test (linter/formatter)
 
 on: [push]
+
+permissions:
+    contents: read
 
 jobs:
     build:
@@ -9,6 +11,7 @@ jobs:
         strategy:
             matrix:
                 python-version: ["3.13"]
+
         steps:
             - uses: actions/checkout@v4
               with:
@@ -31,7 +34,3 @@ jobs:
             - name: Run all linters and formatters
               run: |
                   pre-commit run --all-files
-
-            # - name: Run tests with coverage
-            #   run: |
-            #       pytest --cov=nestegg --cov-branch --cov-report=xml --cov-fail-under=50 tests/
