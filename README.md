@@ -177,6 +177,10 @@ The application uses the following data sources:
 
 For future dates, the application uses sophisticated projections based on historical data patterns and volatility. These projections are clearly marked in the results.
 
+## Changelog
+
+See [CHANGELOG.md](https://github.com/kiraum/nestegg/blob/main/CHANGELOG.md) for a detailed history of changes.
+
 ## License
 
 See [LICENSE](https://raw.githubusercontent.com/kiraum/nestegg/refs/heads/main/LICENSE) file for details.
