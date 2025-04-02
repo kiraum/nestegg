@@ -161,6 +161,9 @@ async def list_investment_types():
     * For Bitcoin, real market prices from CoinGecko API
 
     For CDB investments, you must provide the CDB rate.
+    For LCI/LCA investments, you must provide the respective rate.
+    For CDI-based LCI/LCA (LCI_CDI/LCA_CDI), you must provide the cdi_percentage.
+    For IPCA-based LCI/LCA (LCI_IPCA/LCA_IPCA), you must provide the ipca_spread.
     For other investment types, the rate is fetched from BCB or CoinGecko.
     """,
     response_description="Calculated investment returns including taxes",
@@ -181,7 +184,9 @@ async def calculate_investment(
     Calculate investment returns for different Brazilian investment types.
 
     Args:
-        investment_type: Type of investment (POUPANCA, SELIC, CDB, LCI, LCA, IPCA, CDI, BTC)
+        investment_type: Type of investment
+            (POUPANCA, SELIC, CDB, LCI, LCA, IPCA, CDI, BTC,
+            LCI_CDI, LCA_CDI, LCI_IPCA, LCA_IPCA)
         amount: Initial investment amount
         start_date: Start date for the investment period
         end_date: End date for the investment period
@@ -256,6 +261,10 @@ async def calculate_investment(
     * CDB (if rate provided)
     * LCI (if rate provided)
     * LCA (if rate provided)
+    * LCI_CDI (if cdi percentage provided via lci_cdi_percentage)
+    * LCA_CDI (if cdi percentage provided via lca_cdi_percentage)
+    * LCI_IPCA (if ipca spread provided via lci_ipca_spread)
+    * LCA_IPCA (if ipca spread provided via lca_ipca_spread)
     * Bitcoin (always included, using real market prices from CoinGecko)
 
     Results are sorted by effective rate and include tax implications.
@@ -272,6 +281,10 @@ async def compare_investments(
     ipca_spread: float = 0.0,
     selic_spread: float = 0.0,
     cdi_percentage: float = 100.0,
+    lci_cdi_percentage: Optional[float] = None,
+    lca_cdi_percentage: Optional[float] = None,
+    lci_ipca_spread: Optional[float] = None,
+    lca_ipca_spread: Optional[float] = None,
 ):
     """
     Compare different investment types and provide recommendations.
@@ -286,6 +299,10 @@ async def compare_investments(
         ipca_spread: Spread to add to IPCA rate in percentage points (e.g., 5.0 for IPCA+5%)
         selic_spread: Spread to add to SELIC rate in percentage points (e.g., 3.0 for SELIC+3%)
         cdi_percentage: Percentage of CDI (e.g., 109.0 for 109% of CDI)
+        lci_cdi_percentage: Percentage of CDI for LCI_CDI investment (e.g., 95.0 for 95% of CDI)
+        lca_cdi_percentage: Percentage of CDI for LCA_CDI investment (e.g., 90.0 for 90% of CDI)
+        lci_ipca_spread: Spread to add to IPCA for LCI_IPCA investment (e.g., 4.5 for IPCA+4.5%)
+        lca_ipca_spread: Spread to add to IPCA for LCA_IPCA investment (e.g., 4.0 for IPCA+4.0%)
 
     Returns:
         List of investment comparisons with recommendations
@@ -318,6 +335,17 @@ async def compare_investments(
             selic_spread,
             cdi_percentage,
         )
+
+        # Log new investment parameters if provided
+        if lci_cdi_percentage is not None:
+            logger.info("LCI_CDI: %.1f%% of CDI", lci_cdi_percentage)
+        if lca_cdi_percentage is not None:
+            logger.info("LCA_CDI: %.1f%% of CDI", lca_cdi_percentage)
+        if lci_ipca_spread is not None:
+            logger.info("LCI_IPCA: IPCA+%.1f%%", lci_ipca_spread)
+        if lca_ipca_spread is not None:
+            logger.info("LCA_IPCA: IPCA+%.1f%%", lca_ipca_spread)
+
         logger.info("Using date range: %s to %s", start_date, end_date)
 
         # Use the shared calculator instance instead of creating a new one
@@ -337,6 +365,10 @@ async def compare_investments(
             ipca_spread=ipca_spread,
             selic_spread=selic_spread,
             cdi_percentage=cdi_percentage,
+            lci_cdi_percentage=lci_cdi_percentage,
+            lca_cdi_percentage=lca_cdi_percentage,
+            lci_ipca_spread=lci_ipca_spread,
+            lca_ipca_spread=lca_ipca_spread,
             start_date_param=start_date,
             end_date_param=end_date,
         )

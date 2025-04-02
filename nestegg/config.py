@@ -26,16 +26,17 @@ def setup_logging(debug: bool = False) -> None:
 # Investment type descriptions
 INVESTMENT_DESCRIPTIONS: dict[InvestmentType, str] = {
     InvestmentType.POUPANCA: ("Poupança - Tax-free savings account with yield based on SELIC rate"),
-    InvestmentType.SELIC: ("SELIC Treasury Bonds - Government bonds yielding 100% of SELIC rate"),
-    InvestmentType.CDB: ("CDB (Certificado de Depósito Bancário) - " "Bank deposit certificate with fixed rate"),
-    InvestmentType.LCI: ("LCI (Letra de Crédito Imobiliário) - Real estate credit note, tax-free"),
-    InvestmentType.LCA: ("LCA (Letra de Crédito do Agronegócio) - " "Agribusiness credit note, tax-free"),
-    InvestmentType.IPCA: ("IPCA - Investment indexed to Brazilian inflation index"),
-    InvestmentType.CDI: (
-        "CDI (Certificado de Depósito Interbancário) - "
-        "Interbank deposit rate used as a reference for many investments"
-    ),
+    InvestmentType.SELIC: ("Tesouro SELIC - Government bonds yielding 100% of SELIC rate, can include spread"),
+    InvestmentType.CDB: ("CDB Prefixado - Bank deposit certificate with fixed rate"),
+    InvestmentType.LCI: ("LCI Prefixada - Real estate credit note with fixed rate, tax-free"),
+    InvestmentType.LCA: ("LCA Prefixada - Agribusiness credit note with fixed rate, tax-free"),
+    InvestmentType.IPCA: ("Tesouro IPCA - Government bonds indexed to Brazilian inflation index, can include spread"),
+    InvestmentType.CDI: ("CDB CDI - Bank deposit certificate indexed to Interbank deposit rate, with percentage"),
     InvestmentType.BTC: ("Bitcoin (BTC) - Cryptocurrency with user-specified annual growth rate"),
+    InvestmentType.LCI_CDI: ("LCI CDI - Tax-free real estate credit note indexed to a percentage of CDI rate"),
+    InvestmentType.LCA_CDI: ("LCA CDI - Tax-free agribusiness credit note indexed to a percentage of CDI rate"),
+    InvestmentType.LCI_IPCA: ("LCI IPCA - Tax-free real estate credit note indexed to IPCA plus a spread"),
+    InvestmentType.LCA_IPCA: ("LCA IPCA - Tax-free agribusiness credit note indexed to IPCA plus a spread"),
 }
 
 # API configuration

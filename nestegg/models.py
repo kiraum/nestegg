@@ -33,6 +33,10 @@ class InvestmentType(CaseInsensitiveEnum):
     IPCA = "ipca"
     CDI = "cdi"
     BTC = "btc"
+    LCI_CDI = "lci_cdi"
+    LCA_CDI = "lca_cdi"
+    LCI_IPCA = "lci_ipca"
+    LCA_IPCA = "lca_ipca"
 
 
 class InvestmentRequest(BaseModel):
