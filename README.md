@@ -95,16 +95,16 @@ Response:
 Calculate investment returns for a single Brazilian investment type.
 
 Request parameters:
-- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`)
+- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`, `lci_cdi`, `lca_cdi`, `lci_ipca`, `lca_ipca`)
 - `amount`: Initial investment amount
 - `start_date`: Start date (format: `YYYY-MM-DD`)
 - `end_date`: End date (format: `YYYY-MM-DD`)
 - `cdb_rate`: CDB rate as percentage (required for CDB investments)
-- `lci_rate`: LCI rate as percentage (required for LCI investments)
-- `lca_rate`: LCA rate as percentage (required for LCA investments)
-- `ipca_spread`: IPCA spread in percentage points (optional, default: 0)
+- `lci_rate`: LCI rate as percentage (required for fixed-rate LCI investments)
+- `lca_rate`: LCA rate as percentage (required for fixed-rate LCA investments)
+- `ipca_spread`: IPCA spread in percentage points (optional, default: 0, required for IPCA, LCI_IPCA, LCA_IPCA)
 - `selic_spread`: SELIC spread in percentage points (optional, default: 0)
-- `cdi_percentage`: CDI percentage (optional, default: 100.0)
+- `cdi_percentage`: CDI percentage (optional, default: 100.0, required for CDI, LCI_CDI, LCA_CDI)
 
 Response:
 ```json
