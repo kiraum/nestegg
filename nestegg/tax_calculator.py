@@ -57,6 +57,10 @@ class TaxCalculator:
             InvestmentType.POUPANCA,
             InvestmentType.LCI,
             InvestmentType.LCA,
+            InvestmentType.LCI_CDI,
+            InvestmentType.LCA_CDI,
+            InvestmentType.LCI_IPCA,
+            InvestmentType.LCA_IPCA,
         ):
             logger.debug("No tax for %s investment", investment_type)
             return 0.0
@@ -151,6 +155,10 @@ class TaxCalculator:
             InvestmentType.POUPANCA,
             InvestmentType.LCI,
             InvestmentType.LCA,
+            InvestmentType.LCI_CDI,
+            InvestmentType.LCA_CDI,
+            InvestmentType.LCI_IPCA,
+            InvestmentType.LCA_IPCA,
         ):
             return 0.0
 

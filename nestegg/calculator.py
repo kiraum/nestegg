@@ -69,6 +69,10 @@ class InvestmentCalculator:
         ipca_spread: float = 0.0,
         selic_spread: float = 0.0,
         cdi_percentage: float = 100.0,
+        lci_cdi_percentage: float | None = None,
+        lca_cdi_percentage: float | None = None,
+        lci_ipca_spread: float | None = None,
+        lca_ipca_spread: float | None = None,
         start_date_param: date | None = None,
         end_date_param: date | None = None,
     ) -> list[dict]:
@@ -84,6 +88,10 @@ class InvestmentCalculator:
             ipca_spread: Optional spread to add to IPCA rate (in percentage points, e.g., 5.0 for IPCA+5%)
             selic_spread: Optional spread to add to SELIC rate (in percentage points, e.g., 3.0 for SELIC+3%)
             cdi_percentage: Optional percentage of CDI (e.g., 109.0 for 109% of CDI)
+            lci_cdi_percentage: Optional percentage of CDI for LCI_CDI investment type
+            lca_cdi_percentage: Optional percentage of CDI for LCA_CDI investment type
+            lci_ipca_spread: Optional spread to add to IPCA for LCI_IPCA investment type
+            lca_ipca_spread: Optional spread to add to IPCA for LCA_IPCA investment type
             start_date_param: Optional explicit start date (overrides calculation from period_years)
             end_date_param: Optional explicit end date (overrides calculation from period_years)
 
@@ -99,6 +107,10 @@ class InvestmentCalculator:
         logger.debug("  ipca_spread: %.2f%%", ipca_spread)
         logger.debug("  selic_spread: %.2f%%", selic_spread)
         logger.debug("  cdi_percentage: %.2f%%", cdi_percentage)
+        logger.debug("  lci_cdi_percentage: %s", lci_cdi_percentage)
+        logger.debug("  lca_cdi_percentage: %s", lca_cdi_percentage)
+        logger.debug("  lci_ipca_spread: %s", lci_ipca_spread)
+        logger.debug("  lca_ipca_spread: %s", lca_ipca_spread)
         logger.debug("  start_date_param: %s", start_date_param)
         logger.debug("  end_date_param: %s", end_date_param)
 
@@ -191,7 +203,7 @@ class InvestmentCalculator:
                 selic_result = await self.calculate_investment(selic_request)
 
                 # Format the display name based on the spread
-                selic_display = "SELIC" if selic_spread == 0 else f"SELIC+{selic_spread:.2f}%"
+                selic_display = "SELIC" if selic_spread == 0 else f"Tesouro SELIC+{selic_spread:.2f}%"
 
                 comparisons.append(
                     {
@@ -224,7 +236,7 @@ class InvestmentCalculator:
                 ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
 
                 # Format the display name based on the spread
-                ipca_display = "IPCA" if ipca_spread == 0 else f"IPCA+{ipca_spread:.2f}%"
+                ipca_display = "IPCA" if ipca_spread == 0 else f"Tesouro IPCA+{ipca_spread:.2f}%"
 
                 comparisons.append(
                     {
@@ -257,7 +269,7 @@ class InvestmentCalculator:
                 cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
 
                 # Format the display name based on the percentage
-                cdi_display = "CDI" if cdi_percentage == 100.0 else f"{cdi_percentage:.2f}% of CDI"
+                cdi_display = "CDI" if cdi_percentage == 100.0 else f"CDB {cdi_percentage:.2f}% CDI"
 
                 comparisons.append(
                     {
@@ -290,7 +302,7 @@ class InvestmentCalculator:
                     cdb_result = await self.calculate_investment(cdb_request)
                     comparisons.append(
                         {
-                            "type": "CDB",
+                            "type": "CDB Prefixado " + f"{cdb_rate:.2f}%",
                             "rate": cdb_rate,
                             "effective_rate": cdb_result["effective_rate"],
                             "gross_profit": cdb_result["gross_profit"],
@@ -319,7 +331,7 @@ class InvestmentCalculator:
                     lci_result = await self.calculate_investment(lci_request)
                     comparisons.append(
                         {
-                            "type": "LCI",
+                            "type": "LCI Prefixada " + f"{lci_rate:.2f}%",
                             "rate": lci_rate,
                             "effective_rate": lci_result["effective_rate"],
                             "gross_profit": lci_result["gross_profit"],
@@ -348,7 +360,7 @@ class InvestmentCalculator:
                     lca_result = await self.calculate_investment(lca_request)
                     comparisons.append(
                         {
-                            "type": "LCA",
+                            "type": "LCA Prefixada " + f"{lca_rate:.2f}%",
                             "rate": lca_rate,
                             "effective_rate": lca_result["effective_rate"],
                             "gross_profit": lca_result["gross_profit"],
@@ -397,6 +409,142 @@ class InvestmentCalculator:
                 logger.debug("Added Bitcoin to comparisons")
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Error calculating Bitcoin investment: %s", str(e))
+
+            # Add LCI_CDI comparison if percentage is provided
+            if lci_cdi_percentage is not None:
+                try:
+                    logger.debug("Calculating LCI_CDI investment with %.2f%% of CDI", lci_cdi_percentage)
+                    lci_cdi_request = InvestmentRequest(
+                        investment_type=InvestmentType.LCI_CDI,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        cdi_percentage=lci_cdi_percentage,
+                    )
+                    lci_cdi_result = await self.calculate_investment(lci_cdi_request)
+                    cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
+
+                    # Format display name
+                    display_name = f"LCI {lci_cdi_percentage:.2f}% CDI"
+
+                    comparisons.append(
+                        {
+                            "type": display_name,
+                            "rate": cdi_rate * 100 * (lci_cdi_percentage / 100.0),  # Adjust rate by percentage
+                            "effective_rate": lci_cdi_result["effective_rate"],
+                            "gross_profit": lci_cdi_result["gross_profit"],
+                            "net_profit": lci_cdi_result["net_profit"],
+                            "tax_amount": lci_cdi_result["tax_amount"],
+                            "final_amount": lci_cdi_result["final_amount"],
+                            "tax_free": lci_cdi_result["tax_info"]["is_tax_free"],
+                            "tax_info": lci_cdi_result["tax_info"],
+                        }
+                    )
+                    logger.debug("Added LCI_CDI to comparisons")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Error calculating LCI_CDI investment: %s", str(e), exc_info=True)
+
+            # Add LCA_CDI comparison if percentage is provided
+            if lca_cdi_percentage is not None:
+                try:
+                    logger.debug("Calculating LCA_CDI investment with %.2f%% of CDI", lca_cdi_percentage)
+                    lca_cdi_request = InvestmentRequest(
+                        investment_type=InvestmentType.LCA_CDI,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        cdi_percentage=lca_cdi_percentage,
+                    )
+                    lca_cdi_result = await self.calculate_investment(lca_cdi_request)
+                    cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
+
+                    # Format display name
+                    display_name = f"LCA {lca_cdi_percentage:.2f}% CDI"
+
+                    comparisons.append(
+                        {
+                            "type": display_name,
+                            "rate": cdi_rate * 100 * (lca_cdi_percentage / 100.0),  # Adjust rate by percentage
+                            "effective_rate": lca_cdi_result["effective_rate"],
+                            "gross_profit": lca_cdi_result["gross_profit"],
+                            "net_profit": lca_cdi_result["net_profit"],
+                            "tax_amount": lca_cdi_result["tax_amount"],
+                            "final_amount": lca_cdi_result["final_amount"],
+                            "tax_free": lca_cdi_result["tax_info"]["is_tax_free"],
+                            "tax_info": lca_cdi_result["tax_info"],
+                        }
+                    )
+                    logger.debug("Added LCA_CDI to comparisons")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Error calculating LCA_CDI investment: %s", str(e), exc_info=True)
+
+            # Add LCI_IPCA comparison if spread is provided
+            if lci_ipca_spread is not None:
+                try:
+                    logger.debug("Calculating LCI_IPCA investment with spread: +%.2f%%", lci_ipca_spread)
+                    lci_ipca_request = InvestmentRequest(
+                        investment_type=InvestmentType.LCI_IPCA,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        ipca_spread=lci_ipca_spread,
+                    )
+                    lci_ipca_result = await self.calculate_investment(lci_ipca_request)
+                    ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
+
+                    # Format display name
+                    display_name = f"LCI IPCA+{lci_ipca_spread:.2f}%"
+
+                    comparisons.append(
+                        {
+                            "type": display_name,
+                            "rate": ipca_rate * 100 + lci_ipca_spread,  # Add spread to display rate
+                            "effective_rate": lci_ipca_result["effective_rate"],
+                            "gross_profit": lci_ipca_result["gross_profit"],
+                            "net_profit": lci_ipca_result["net_profit"],
+                            "tax_amount": lci_ipca_result["tax_amount"],
+                            "final_amount": lci_ipca_result["final_amount"],
+                            "tax_free": lci_ipca_result["tax_info"]["is_tax_free"],
+                            "tax_info": lci_ipca_result["tax_info"],
+                        }
+                    )
+                    logger.debug("Added LCI_IPCA to comparisons")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Error calculating LCI_IPCA investment: %s", str(e), exc_info=True)
+
+            # Add LCA_IPCA comparison if spread is provided
+            if lca_ipca_spread is not None:
+                try:
+                    logger.debug("Calculating LCA_IPCA investment with spread: +%.2f%%", lca_ipca_spread)
+                    lca_ipca_request = InvestmentRequest(
+                        investment_type=InvestmentType.LCA_IPCA,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        ipca_spread=lca_ipca_spread,
+                    )
+                    lca_ipca_result = await self.calculate_investment(lca_ipca_request)
+                    ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
+
+                    # Format display name
+                    display_name = f"LCA IPCA+{lca_ipca_spread:.2f}%"
+
+                    comparisons.append(
+                        {
+                            "type": display_name,
+                            "rate": ipca_rate * 100 + lca_ipca_spread,  # Add spread to display rate
+                            "effective_rate": lca_ipca_result["effective_rate"],
+                            "gross_profit": lca_ipca_result["gross_profit"],
+                            "net_profit": lca_ipca_result["net_profit"],
+                            "tax_amount": lca_ipca_result["tax_amount"],
+                            "final_amount": lca_ipca_result["final_amount"],
+                            "tax_free": lca_ipca_result["tax_info"]["is_tax_free"],
+                            "tax_info": lca_ipca_result["tax_info"],
+                        }
+                    )
+                    logger.debug("Added LCA_IPCA to comparisons")
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Error calculating LCA_IPCA investment: %s", str(e), exc_info=True)
 
             # Sort by effective rate (highest first)
             if comparisons:
@@ -602,6 +750,189 @@ class InvestmentCalculator:
                 )
 
                 rate = annual_rate  # For response
+
+            elif request.investment_type == InvestmentType.LCI_CDI:
+                logger.debug("LCI_CDI investment detected with %.2f%% of CDI", request.cdi_percentage or 100.0)
+                if request.cdi_percentage is None:
+                    raise ValueError("CDI percentage is required for LCI_CDI investments")
+
+                if request.end_date is None:
+                    raise ValueError("End date must be provided for LCI_CDI investments")
+
+                # Get the CDI rate
+                cdi_rate = await self.api_client.get_cdi_rate(request.end_date)
+                logger.debug("Raw CDI rate from API: %.4f%%", cdi_rate * 100)
+
+                # For CDI, we'll multiply the CDI rate by the percentage
+                annual_rate = cdi_rate * (request.cdi_percentage / 100.0)
+                rate = annual_rate
+
+                logger.debug(
+                    "Using %.2f%% of CDI rate for LCI_CDI: %.4f%% (CDI %.4f%% × %.2f%%)",
+                    request.cdi_percentage,
+                    annual_rate * 100,
+                    cdi_rate * 100,
+                    request.cdi_percentage,
+                )
+
+                # CDI uses daily compounding (252 business days per year)
+                daily_rate = rate / 252
+                business_days = int(request.period_years * 252)
+                logger.debug(
+                    "LCI_CDI daily rate: %.6f%%, business days: %d",
+                    daily_rate * 100,
+                    business_days,
+                )
+
+                # Compound interest formula: P * (1 + r)^t - P
+                gross_profit = request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                logger.debug(
+                    "LCI_CDI calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                    request.initial_amount,
+                    daily_rate,
+                    business_days,
+                    request.initial_amount,
+                    gross_profit,
+                )
+
+            elif request.investment_type == InvestmentType.LCA_CDI:
+                logger.debug("LCA_CDI investment detected with %.2f%% of CDI", request.cdi_percentage or 100.0)
+                if request.cdi_percentage is None:
+                    raise ValueError("CDI percentage is required for LCA_CDI investments")
+
+                if request.end_date is None:
+                    raise ValueError("End date must be provided for LCA_CDI investments")
+
+                # Get the CDI rate
+                cdi_rate = await self.api_client.get_cdi_rate(request.end_date)
+                logger.debug("Raw CDI rate from API: %.4f%%", cdi_rate * 100)
+
+                # For CDI, we'll multiply the CDI rate by the percentage
+                annual_rate = cdi_rate * (request.cdi_percentage / 100.0)
+                rate = annual_rate
+
+                logger.debug(
+                    "Using %.2f%% of CDI rate for LCA_CDI: %.4f%% (CDI %.4f%% × %.2f%%)",
+                    request.cdi_percentage,
+                    annual_rate * 100,
+                    cdi_rate * 100,
+                    request.cdi_percentage,
+                )
+
+                # CDI uses daily compounding (252 business days per year)
+                daily_rate = rate / 252
+                business_days = int(request.period_years * 252)
+                logger.debug(
+                    "LCA_CDI daily rate: %.6f%%, business days: %d",
+                    daily_rate * 100,
+                    business_days,
+                )
+
+                # Compound interest formula: P * (1 + r)^t - P
+                gross_profit = request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                logger.debug(
+                    "LCA_CDI calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                    request.initial_amount,
+                    daily_rate,
+                    business_days,
+                    request.initial_amount,
+                    gross_profit,
+                )
+
+            elif request.investment_type == InvestmentType.LCI_IPCA:
+                logger.debug("LCI_IPCA investment detected with spread: +%.2f%%", request.ipca_spread or 0.0)
+                if request.ipca_spread is None:
+                    raise ValueError("IPCA spread is required for LCI_IPCA investments")
+
+                if request.end_date is None:
+                    raise ValueError("End date must be provided for LCI_IPCA investments")
+
+                # Get the IPCA rate
+                ipca_rate = await self.api_client.get_ipca_rate(request.end_date)
+                logger.debug("Raw IPCA rate from API: %.4f%%", ipca_rate * 100)
+
+                ipca_spread = request.ipca_spread
+                logger.debug("IPCA spread for LCI_IPCA: +%.2f%%", ipca_spread)
+
+                # For IPCA, we'll use the actual IPCA rate plus the specified spread
+                annual_rate = ipca_rate + (ipca_spread / 100)  # Convert spread percentage to decimal
+                rate = annual_rate
+
+                logger.debug(
+                    "Using IPCA%s rate for LCI_IPCA: %.4f%% (IPCA %.4f%% + %.2f%%)",
+                    f"+{ipca_spread}%" if ipca_spread > 0 else "",
+                    annual_rate * 100,
+                    ipca_rate * 100,
+                    ipca_spread,
+                )
+
+                # IPCA uses daily compounding (252 business days per year)
+                daily_rate = rate / 252
+                business_days = int(request.period_years * 252)
+                logger.debug(
+                    "LCI_IPCA daily rate: %.6f%%, business days: %d",
+                    daily_rate * 100,
+                    business_days,
+                )
+
+                # Compound interest formula: P * (1 + r)^t - P
+                gross_profit = request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                logger.debug(
+                    "LCI_IPCA calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                    request.initial_amount,
+                    daily_rate,
+                    business_days,
+                    request.initial_amount,
+                    gross_profit,
+                )
+
+            elif request.investment_type == InvestmentType.LCA_IPCA:
+                logger.debug("LCA_IPCA investment detected with spread: +%.2f%%", request.ipca_spread or 0.0)
+                if request.ipca_spread is None:
+                    raise ValueError("IPCA spread is required for LCA_IPCA investments")
+
+                if request.end_date is None:
+                    raise ValueError("End date must be provided for LCA_IPCA investments")
+
+                # Get the IPCA rate
+                ipca_rate = await self.api_client.get_ipca_rate(request.end_date)
+                logger.debug("Raw IPCA rate from API: %.4f%%", ipca_rate * 100)
+
+                ipca_spread = request.ipca_spread
+                logger.debug("IPCA spread for LCA_IPCA: +%.2f%%", ipca_spread)
+
+                # For IPCA, we'll use the actual IPCA rate plus the specified spread
+                annual_rate = ipca_rate + (ipca_spread / 100)  # Convert spread percentage to decimal
+                rate = annual_rate
+
+                logger.debug(
+                    "Using IPCA%s rate for LCA_IPCA: %.4f%% (IPCA %.4f%% + %.2f%%)",
+                    f"+{ipca_spread}%" if ipca_spread > 0 else "",
+                    annual_rate * 100,
+                    ipca_rate * 100,
+                    ipca_spread,
+                )
+
+                # IPCA uses daily compounding (252 business days per year)
+                daily_rate = rate / 252
+                business_days = int(request.period_years * 252)
+                logger.debug(
+                    "LCA_IPCA daily rate: %.6f%%, business days: %d",
+                    daily_rate * 100,
+                    business_days,
+                )
+
+                # Compound interest formula: P * (1 + r)^t - P
+                gross_profit = request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                logger.debug(
+                    "LCA_IPCA calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                    request.initial_amount,
+                    daily_rate,
+                    business_days,
+                    request.initial_amount,
+                    gross_profit,
+                )
+
             else:
                 # For non-CDB investments, get current SELIC rate for reference
                 if request.end_date is None:
