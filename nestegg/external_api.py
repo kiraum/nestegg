@@ -420,10 +420,9 @@ class BCBApiClient:
             )
             return latest_rate
 
-        except Exception as e:
+        except (ValueError, httpx.HTTPError, KeyError, TypeError, IndexError) as e:
             logger.error("Failed to get SELIC rate for future date: %s", e)
-            # Propagate the error instead of using a fallback value
-            raise ValueError(f"Failed to predict SELIC rate: {str(e)}") from e
+            raise ValueError(f"Failed to get SELIC rate for future date: {target_date}. Error: {str(e)}") from e
 
     async def _get_historical_selic_rate(
         self, target_date: date, historical_start_date: Optional[date] = None
@@ -868,68 +867,115 @@ class BCBApiClient:
             try:
                 return await self._get_historical_ipca_rate(date_obj)
             except ValueError as e:
-                # For historical dates, if we can't get data, this is a real error
-                logger.error("Cannot get historical IPCA data: %s", e)
-                raise
+                # For historical dates, if we can't get data, try fallback mechanisms
+                logger.warning("Could not get historical IPCA data: %s. Will try fallback mechanisms.", e)
+                # Don't raise - try fallback mechanisms below
+        else:
+            logger.info("Requested IPCA rate for future date: %s. Using fallback prediction mechanisms.", date_obj)
 
-        # CASE 2: Future date - use a pattern from the past with the same length
-        logger.info("Requested IPCA rate for future date: %s", date_obj)
-        days_in_future = (date_obj - today).days
+        # If we get here, either:
+        # 1. We have a future date, or
+        # 2. Getting historical data failed and we need fallbacks
 
-        # Calculate the equivalent past date range with same length
-        past_end_date = today
-        past_start_date = today - timedelta(days=days_in_future)
+        # First fallback: Try most recent months (one by one going backwards)
+        max_months_to_try = 6  # Try up to 6 months back
+        target_month = date_obj.month
+        target_year = date_obj.year
 
-        # Log that we're using historical patterns for prediction
-        logger.info(
-            "Using historical pattern from %s to %s to predict future date %s",
-            past_start_date,
-            past_end_date,
-            date_obj,
-        )
+        for i in range(1, max_months_to_try + 1):
+            # Calculate previous month
+            prev_month = target_month - i
+            prev_year = target_year
 
-        # Since IPCA is monthly, we need the monthly rate from the same month last year
+            # Handle month rollover
+            while prev_month <= 0:
+                prev_month += 12
+                prev_year -= 1
+
+            # Don't try future dates
+            if prev_year > today.year or (prev_year == today.year and prev_month > today.month):
+                continue
+
+            try:
+                past_date = date(prev_year, prev_month, 1)
+                logger.info("Fallback %d: Trying to get IPCA from recent month: %s", i, past_date)
+                historical_rate = await self._get_historical_ipca_rate(past_date)
+                logger.info(
+                    "Fallback successful: Using IPCA from %s (%.4f%%) as prediction for %s",
+                    past_date,
+                    historical_rate * 100,
+                    date_obj,
+                )
+                return historical_rate
+            except (ValueError, httpx.HTTPError, KeyError, TypeError, IndexError) as month_error:
+                logger.warning(
+                    "Fallback %d failed: Could not get IPCA from month %d/%d: %s. Trying earlier month.",
+                    i,
+                    prev_month,
+                    prev_year,
+                    str(month_error),
+                )
+                continue
+
+        # Second fallback: Try same month last year if the monthly approach failed
         try:
             # Try to get the rate from the same month last year
-            same_month_last_year = date(date_obj.year - 1, date_obj.month, 1)
+            same_month_last_year = date(max(date_obj.year - 1, today.year - 1), date_obj.month, 1)
+            logger.info("Trying same month from last year: %s", same_month_last_year)
             historical_rate = await self._get_historical_ipca_rate(same_month_last_year)
             logger.info(
-                "Using IPCA from %s (%.4f%%) as prediction for %s",
+                "Fallback successful: Using IPCA from %s (%.4f%%) as prediction for %s",
                 same_month_last_year,
                 historical_rate * 100,
                 date_obj,
             )
             return historical_rate
-        except ValueError as hist_error:
+        except (ValueError, httpx.HTTPError, KeyError, TypeError, IndexError) as hist_error:
             logger.warning(
-                "Could not get IPCA from same month last year, trying 12-month average: %s",
+                "Could not get IPCA from same month last year: %s. Trying 12-month average instead.",
                 str(hist_error),
             )
 
-            # Get average IPCA for the last 12 months
-            rates = []
-            errors = []
-            for i in range(1, 13):
-                past_date = today - timedelta(days=30 * i)
-                try:
-                    rate = await self._get_historical_ipca_rate(past_date)
-                    rates.append(rate)
-                except (ValueError, KeyError, TypeError) as month_error:
-                    # Skip months we can't get data for
-                    errors.append(str(month_error))
+        # Third fallback: Try to get the average IPCA for the last 12 months
+        rates = []
+        errors = []
+        # Get any available historical data from the past year
+        for i in range(0, 12):
+            try:
+                # Use the first day of each month going back from current month
+                past_month = today.month - i
+                past_year = today.year
+                # Handle month rollover
+                while past_month <= 0:
+                    past_month += 12
+                    past_year -= 1
 
-            if rates:
-                avg_rate = sum(rates) / len(rates)
-                logger.info(
-                    "Using average IPCA from last %d months (%.4f%%) as prediction for %s",
-                    len(rates),
-                    avg_rate * 100,
-                    date_obj,
-                )
-                return avg_rate
+                past_date = date(past_year, past_month, 1)
+                logger.debug("Trying to get IPCA data for past date: %s", past_date)
+                rate = await self._get_historical_ipca_rate(past_date)
+                rates.append(rate)
+                logger.debug("Successfully got IPCA rate for %s: %.4f%%", past_date, rate * 100)
+            except (ValueError, httpx.HTTPError, KeyError, TypeError, IndexError) as month_error:
+                # Skip months we can't get data for
+                errors.append(f"{past_month}/{past_year}: {str(month_error)}")
+                continue
 
-            # If we couldn't get any data, this is a real error
-            raise ValueError(f"Failed to get IPCA data for prediction. Errors: {'; '.join(errors)}") from hist_error
+        if rates:
+            avg_rate = sum(rates) / len(rates)
+            logger.info(
+                "Using average IPCA from last %d months (%.4f%%) as prediction for %s",
+                len(rates),
+                avg_rate * 100,
+                date_obj,
+            )
+            return avg_rate
+
+        # Last resort: Instead of using a hardcoded fallback value, propagate the error
+        logger.error(
+            "All fallbacks failed: Could not retrieve historical IPCA data for %s",
+            date_obj,
+        )
+        raise ValueError(f"Could not retrieve IPCA data for {date_obj} using any fallback method")
 
     async def _get_historical_ipca_rate(self, date_obj: date, historical_start_date: Optional[date] = None) -> float:
         """
@@ -940,6 +986,17 @@ class BCBApiClient:
             historical_start_date: Optional start date to use for the API request
                                   (useful when getting patterns for future predictions)
         """
+        # Get today's date
+        today = date.today()
+
+        # Immediately reject future reference dates to prevent making API calls for future dates
+        if date_obj > today:
+            logger.info(
+                "Cannot get historical IPCA data for future date: %s - this is expected and fallbacks will be used",
+                date_obj,
+            )
+            raise ValueError(f"Cannot get historical IPCA data for future date: {date_obj}")
+
         reference_date = self._get_reference_date(date_obj, InvestmentType.IPCA)
         logger.debug("Using reference date: %s", reference_date)
 
@@ -951,22 +1008,22 @@ class BCBApiClient:
         else:
             start_date = date(reference_date.year, reference_date.month, 1)
 
-        # For end_date, use the first day of the next month
+        # For end_date, use the first day of the next month, but not beyond today
         if reference_date.month == 12:
             end_date = date(reference_date.year + 1, 1, 1)
         else:
             end_date = date(reference_date.year, reference_date.month + 1, 1)
 
         # Make sure we're not using future dates in the API request
-        today = date.today()
         if start_date > today:
-            logger.warning(
-                "Adjusting future start date %s to first of current month for API request",
+            logger.info(
+                "Cannot use future start date %s for API request - this is expected and fallbacks will be used",
                 start_date,
             )
-            start_date = date(today.year, today.month, 1)
+            raise ValueError(f"Cannot get historical IPCA data: start date {start_date} is in the future")
+
         if end_date > today:
-            logger.warning(
+            logger.info(
                 "Adjusting future end date %s to today %s for API request",
                 end_date,
                 today,
@@ -1038,8 +1095,8 @@ class BCBApiClient:
             # If we get here, the API didn't have any data
             raise ValueError("No IPCA data available for the requested period")
 
-        except Exception as e:
-            # Propagate the error to caller
+        except (ValueError, KeyError, IndexError, TypeError, httpx.HTTPError) as e:
+            # Propagate specific exceptions with additional context
             raise ValueError(f"Failed to retrieve historical IPCA rate for {date_obj}: {str(e)}") from e
 
     async def get_cdi_rate(self, date_obj: date) -> float:
@@ -1091,9 +1148,9 @@ class BCBApiClient:
 
             return cdi_rate
 
-        except Exception as e:
+        except (ValueError, httpx.HTTPError, KeyError, TypeError, IndexError) as e:
             logger.error("Failed to calculate CDI rate for future date: %s", e)
-            raise ValueError(f"Failed to calculate CDI rate: {str(e)}") from e
+            raise ValueError(f"Failed to calculate CDI rate for future date: {date_obj}. Error: {str(e)}") from e
 
     async def _get_historical_cdi_rate(self, date_obj: date, historical_start_date: Optional[date] = None) -> float:
         """
@@ -1197,7 +1254,7 @@ class BCBApiClient:
                 rate_data["data"],
             )
             return annual_rate
-        except Exception as e:
+        except (ValueError, KeyError, IndexError, TypeError, httpx.HTTPError) as e:
             logger.error("Error fetching CDI rate: %s", str(e))
             raise ValueError(f"Failed to retrieve CDI rate: {str(e)}") from e
 

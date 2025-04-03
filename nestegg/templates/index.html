@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NestEgg - Brazilian Investment Comparison Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <header class="py-3 mb-4 border-bottom">
+            <div class="container d-flex flex-wrap justify-content-center">
+                <a href="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-decoration-none">
+                    <span class="fs-4">NestEgg</span>
+                </a>
+                <span class="text-muted">Brazilian Investment Comparison Tool</span>
+            </div>
+        </header>
+
+        <main class="container">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">Investment Parameters</div>
+                        <div class="card-body">
+                            <form id="investment-form">
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="amount" class="form-label">Amount (R$)</label>
+                                        <input type="number" class="form-control" id="amount" name="amount" value="10000" min="1" step="1000" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="start-date" class="form-label">Start Date</label>
+                                        <div class="input-group">
+                                            <input type="date" class="form-control" id="start-date" name="start_date" required>
+                                            <button type="button" class="btn btn-outline-secondary" id="start-date-today">Today</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="end-date" class="form-label">End Date</label>
+                                        <div class="input-group">
+                                            <input type="date" class="form-control" id="end-date" name="end_date" required>
+                                            <button type="button" class="btn btn-outline-secondary" id="end-date-today">Today</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="button" id="compare-btn" class="btn btn-primary">Compare Selected Investments</button>
+                        <button type="button" id="reset-btn" class="btn btn-outline-secondary">New Query</button>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header">Investment Types</div>
+                        <div class="card-body">
+                            <div id="investment-types-container">
+                                <!-- Investment types will be loaded here -->
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">Results</div>
+                        <div class="card-body">
+                            <div id="results-container">
+                                <p class="text-center text-muted">Select an investment type and click Calculate</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer mt-5 py-3 bg-light">
+            <div class="container text-center">
+                <span class="text-muted">NestEgg - Brazilian Investment Comparison Tool</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom TypeScript -->
+    <script src="{{ url_for('static', path='/js/app.js') }}" type="module"></script>
+</body>
+</html>

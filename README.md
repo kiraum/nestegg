@@ -24,7 +24,10 @@ A FastAPI application that helps you compare different Brazilian investment inde
 - Automatic tax calculation based on investment type and period
 - Historical data from Brazilian Central Bank API
 - Future projections based on historical volatility and trends
+- Dynamic IPCA data retrieval with multi-level fallback strategies
 - Bitcoin price data from CryptoCompare API
+- User-friendly interface with Today buttons for date selection
+- Convenient form reset with New Query button
 - Robust error handling and logging
 - Easy-to-use REST API
 
@@ -41,6 +44,18 @@ A FastAPI application that helps you compare different Brazilian investment inde
    uv pip install -e .
    ```
 
+## Building the UI
+
+The NestEgg UI is built with TypeScript and requires Node.js to compile the TypeScript code to JavaScript.
+
+1. Make sure you have Node.js installed (version 16+)
+
+2. Build the TypeScript files:
+   ```bash
+   cd nestegg/static
+   ./build.sh
+   ```
+
 ## Usage
 
 1. Start the server:
@@ -48,9 +63,11 @@ A FastAPI application that helps you compare different Brazilian investment inde
    uvicorn nestegg.main:app --reload --port 8001
    ```
 
-2. Open your browser and navigate to `http://localhost:8001/docs` to access the interactive API documentation
+2. Access the UI by navigating to `http://localhost:8001` in your browser
 
-3. Make a POST request to `/api/v1/calculate` with a JSON body like:
+3. Or access the API documentation at `http://localhost:8001/docs` to use the interactive API
+
+4. Make a POST request to `/api/v1/calculate` with a JSON body like:
    ```json
    {
      "investment_type": "cdb",
@@ -61,7 +78,7 @@ A FastAPI application that helps you compare different Brazilian investment inde
    }
    ```
 
-4. Or compare multiple investments at once with:
+5. Or compare multiple investments at once with:
    ```bash
    curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
    ```
@@ -95,16 +112,16 @@ Response:
 Calculate investment returns for a single Brazilian investment type.
 
 Request parameters:
-- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`)
+- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`, `lci_cdi`, `lca_cdi`, `lci_ipca`, `lca_ipca`)
 - `amount`: Initial investment amount
 - `start_date`: Start date (format: `YYYY-MM-DD`)
 - `end_date`: End date (format: `YYYY-MM-DD`)
 - `cdb_rate`: CDB rate as percentage (required for CDB investments)
-- `lci_rate`: LCI rate as percentage (required for LCI investments)
-- `lca_rate`: LCA rate as percentage (required for LCA investments)
-- `ipca_spread`: IPCA spread in percentage points (optional, default: 0)
+- `lci_rate`: LCI rate as percentage (required for fixed-rate LCI investments)
+- `lca_rate`: LCA rate as percentage (required for fixed-rate LCA investments)
+- `ipca_spread`: IPCA spread in percentage points (optional, default: 0, required for IPCA, LCI_IPCA, LCA_IPCA)
 - `selic_spread`: SELIC spread in percentage points (optional, default: 0)
-- `cdi_percentage`: CDI percentage (optional, default: 100.0)
+- `cdi_percentage`: CDI percentage (optional, default: 100.0, required for CDI, LCI_CDI, LCA_CDI)
 
 Response:
 ```json
@@ -140,13 +157,19 @@ Request parameters:
 - `cdb_rate`: CDB rate as percentage (optional)
 - `lci_rate`: LCI rate as percentage (optional)
 - `lca_rate`: LCA rate as percentage (optional)
-- `ipca_spread`: IPCA spread in percentage points (optional, default: 0)
-- `selic_spread`: SELIC spread in percentage points (optional, default: 0)
-- `cdi_percentage`: CDI percentage (optional, default: 100.0)
+- `ipca_spread`: IPCA spread in percentage points (optional)
+- `selic_spread`: SELIC spread in percentage points (optional)
+- `cdi_percentage`: CDI percentage (optional)
 - `lci_cdi_percentage`: LCI CDI percentage (optional)
 - `lca_cdi_percentage`: LCA CDI percentage (optional)
 - `lci_ipca_spread`: LCI IPCA spread (optional)
 - `lca_ipca_spread`: LCA IPCA spread (optional)
+- `include_poupanca`: Whether to include Poupança in comparison (optional, default: false)
+- `include_selic`: Whether to include base SELIC in comparison (optional, default: false)
+- `include_cdi`: Whether to include base CDI in comparison (optional, default: false)
+- `include_btc`: Whether to include Bitcoin in comparison (optional, default: false)
+
+The comparison will only include investment types that are explicitly requested through parameters.
 
 Response:
 ```json
@@ -238,6 +261,11 @@ curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-
 curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0&lci_cdi_percentage=95.0&lca_cdi_percentage=90.0&lci_ipca_spread=4.5&lca_ipca_spread=4.0"
 ```
 
+### Compare investments with specific default types included
+```bash
+curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&lci_rate=13.5&lci_cdi_percentage=94.0&include_poupanca=true&include_btc=true"
+```
+
 ### Compare investments with future dates (projections)
 ```bash
 curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2025-01-01&end_date=2025-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
@@ -257,7 +285,17 @@ The application uses the following data sources:
    - Current and historical Bitcoin prices in BRL
    - Future Bitcoin price projections based on historical volatility
 
-For future dates, the application uses sophisticated projections based on historical data patterns and volatility. These projections are clearly marked in the results.
+For future dates, the application uses sophisticated projections based on historical data patterns and volatility. These projections are clearly marked in the results. For IPCA, the system employs a multi-level dynamic fallback strategy using recent historical data.
+
+## UI Features
+
+The web interface provides several user-friendly features:
+
+- **Today Buttons**: Next to date inputs, allowing you to quickly set a date to today
+- **New Query Button**: Resets all selections and results to start fresh
+- **Responsive Design**: Works well on desktop and mobile devices
+- **Dynamic Investment Selection**: Only selected investment types are included in comparisons
+- **Interactive Results**: Clear visualization of investment performance
 
 ## Changelog
 
