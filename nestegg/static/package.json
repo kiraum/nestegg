@@ -1,0 +1,12 @@
+{
+  "name": "nestegg-ui",
+  "version": "1.0.0",
+  "description": "UI for NestEgg Brazilian Investment Comparison Tool",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

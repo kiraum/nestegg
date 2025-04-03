@@ -27,6 +27,7 @@ dependencies = [
     "pre-commit",
     "flake8",
     "typer",
+    "jinja2",
 ]
 requires-python = ">=3.9"
 
