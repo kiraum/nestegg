@@ -6,6 +6,7 @@ import logging
 from datetime import date, timedelta
 from typing import Optional
 
+from .constants import FGC_GUARANTEED_INVESTMENTS, GOVT_GUARANTEED_INVESTMENTS
 from .external_api import BCBApiClient, CryptoApiClient
 from .models import FGCCoverage, InvestmentRequest, InvestmentType
 from .tax_calculator import TaxCalculator
@@ -206,7 +207,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added Poupança to comparison with rate: %.2f%%", poupanca_rate * 100)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating Poupança: %s", e)
 
             # Compare SELIC
@@ -242,7 +243,7 @@ class InvestmentCalculator:
                         "Added SELIC to comparison with rate: %.2f%%",
                         selic_rate_with_spread * 100,
                     )
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating SELIC: %s", e)
 
             # Compare LCA if rate provided
@@ -271,7 +272,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCA to comparison with rate: %.2f%%", lca_rate)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCA: %s", e)
 
             # Compare IPCA+ if spread provided
@@ -303,7 +304,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added IPCA to comparison with rate: %.2f%% + %.2f%%", ipca_rate * 100, ipca_spread)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating IPCA: %s", e)
 
             # Compare CDI
@@ -336,7 +337,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added CDI to comparison with percentage: %.2f%%", percentage)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating CDI: %s", e)
 
             # Compare CDB
@@ -365,7 +366,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added CDB to comparison with rate: %.2f%%", cdb_rate)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating CDB: %s", e)
 
             # Compare LCI
@@ -394,7 +395,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCI to comparison with rate: %.2f%%", lci_rate)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCI: %s", e)
 
             # Include Bitcoin
@@ -426,7 +427,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added Bitcoin to comparison with growth rate: %.2f%%", btc_default_growth * 100)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating Bitcoin: %s", e)
 
             # Compare LCI CDI if percentage provided
@@ -456,7 +457,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCI CDI to comparison with percentage: %.2f%%", lci_cdi_percentage)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCI CDI: %s", e)
 
             # Compare LCA CDI if percentage provided
@@ -486,7 +487,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCA CDI to comparison with percentage: %.2f%%", lca_cdi_percentage)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCA CDI: %s", e)
 
             # Compare LCI IPCA+ if spread provided
@@ -517,7 +518,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCI IPCA+ to comparison with spread: %.2f%%", lci_ipca_spread)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCI IPCA+: %s", e)
 
             # Compare LCA IPCA+ if spread provided
@@ -548,7 +549,7 @@ class InvestmentCalculator:
                         }
                     )
                     logger.debug("Added LCA IPCA+ to comparison with spread: %.2f%%", lca_ipca_spread)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCA IPCA+: %s", e)
 
             # Sort by effective rate (highest first)
@@ -1429,20 +1430,7 @@ class InvestmentCalculator:
         Returns:
             FGCCoverage object with coverage details
         """
-        # FGC covers bank-issued investments: CDBs, LCIs, LCAs and Poupança
-        fgc_covered_types = (
-            InvestmentType.CDB,
-            InvestmentType.CDI,  # CDB with CDI indexation
-            InvestmentType.LCI,
-            InvestmentType.LCA,
-            InvestmentType.LCI_CDI,
-            InvestmentType.LCA_CDI,
-            InvestmentType.LCI_IPCA,
-            InvestmentType.LCA_IPCA,
-            InvestmentType.POUPANCA,
-        )
-
-        if investment_type in fgc_covered_types:
+        if investment_type in FGC_GUARANTEED_INVESTMENTS:
             covered_amount = min(amount, self.FGC_LIMIT_PER_INSTITUTION)
             covered_percentage = (covered_amount / amount) * 100 if amount > 0 else 0
 
@@ -1458,7 +1446,8 @@ class InvestmentCalculator:
                     f"institution, with a total limit of R$ {self.FGC_TOTAL_LIMIT:,.2f} across all institutions."
                 ),
             )
-        elif investment_type in (InvestmentType.SELIC, InvestmentType.IPCA):
+
+        if investment_type in GOVT_GUARANTEED_INVESTMENTS:
             # Government bonds (SELIC, IPCA) have government guarantee
             return FGCCoverage(
                 is_covered=True,
@@ -1469,14 +1458,14 @@ class InvestmentCalculator:
                 limit_per_institution=None,
                 total_coverage_limit=None,
             )
-        else:
-            # BTC and other types have no guarantee
-            return FGCCoverage(
-                is_covered=False,
-                covered_amount=0,
-                uncovered_amount=amount,
-                coverage_percentage=0,
-                description="Not covered by FGC or government guarantee",
-                limit_per_institution=None,
-                total_coverage_limit=None,
-            )
+
+        # BTC and other types have no guarantee
+        return FGCCoverage(
+            is_covered=False,
+            covered_amount=0,
+            uncovered_amount=amount,
+            coverage_percentage=0,
+            description="Not covered by FGC or government guarantee",
+            limit_per_institution=None,
+            total_coverage_limit=None,
+        )

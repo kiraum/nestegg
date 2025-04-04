@@ -5,6 +5,7 @@ Tax calculator module for investment returns.
 import logging
 from typing import Optional
 
+from .constants import TAX_FREE_INVESTMENTS
 from .models import InvestmentType
 
 logger = logging.getLogger(__name__)
@@ -53,15 +54,7 @@ class TaxCalculator:
         )
 
         # Tax-free investments
-        if investment_type in (
-            InvestmentType.POUPANCA,
-            InvestmentType.LCI,
-            InvestmentType.LCA,
-            InvestmentType.LCI_CDI,
-            InvestmentType.LCA_CDI,
-            InvestmentType.LCI_IPCA,
-            InvestmentType.LCA_IPCA,
-        ):
+        if investment_type in TAX_FREE_INVESTMENTS:
             logger.debug("No tax for %s investment", investment_type)
             return 0.0
 
@@ -157,15 +150,7 @@ class TaxCalculator:
             Tax rate as a decimal (e.g., 0.15 for 15%)
         """
         # Tax-free investments
-        if investment_type in (
-            InvestmentType.POUPANCA,
-            InvestmentType.LCI,
-            InvestmentType.LCA,
-            InvestmentType.LCI_CDI,
-            InvestmentType.LCA_CDI,
-            InvestmentType.LCI_IPCA,
-            InvestmentType.LCA_IPCA,
-        ):
+        if investment_type in TAX_FREE_INVESTMENTS:
             return 0.0
 
         # Bitcoin - special tax rules in Brazil
