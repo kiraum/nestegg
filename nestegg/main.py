@@ -304,14 +304,7 @@ async def compare_investments_endpoint(
         None, description="Spread to add to IPCA for CDB_IPCA investment (e.g., 5.5 for IPCA+5.5%)"
     ),
     include_poupanca: bool = Query(False, description="Whether to include Poupança in the comparison"),
-    include_selic: bool = Query(
-        False, description="Whether to include base SELIC (only needed if not providing selic_spread)"
-    ),
     include_btc: bool = Query(False, description="Whether to include Bitcoin in the comparison"),
-    include_cdb_ipca: bool = Query(
-        False,
-        description="Whether to include CDB_IPCA with default spread (only needed if not providing cdb_ipca_spread)",
-    ),
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
 ):
@@ -325,7 +318,7 @@ async def compare_investments_endpoint(
 
     Investment types that can be compared:
     * Poupança (only if include_poupanca=true)
-    * Tesouro SELIC (if provide selic_spread or include_selic=true)
+    * Tesouro SELIC (if provide selic_spread parameter)
     * CDB Prefixado (only if cdb_rate is provided)
     * CDB CDI (only if cdi_percentage is provided)
     * LCI Prefixado (only if lci_rate is provided)
@@ -335,7 +328,7 @@ async def compare_investments_endpoint(
     * Tesouro IPCA+ (only if ipca_spread is provided)
     * LCI IPCA+ (only if lci_ipca_spread is provided)
     * LCA IPCA+ (only if lca_ipca_spread is provided)
-    * CDB_IPCA (if provide cdb_ipca_spread or include_cdb_ipca=true)
+    * CDB_IPCA (if provide cdb_ipca_spread parameter)
     * Bitcoin (only if include_btc=true)
 
     Returns a list of investment options sorted by most profitable first.
@@ -393,13 +386,13 @@ async def compare_investments_endpoint(
     include_info = []
     if include_poupanca:
         include_info.append("Poupança")
-    if include_selic:
+    if selic_spread is not None:
         include_info.append("SELIC")
     if cdi_percentage is not None:
         include_info.append("CDI")
     if include_btc:
         include_info.append("Bitcoin")
-    if include_cdb_ipca:
+    if cdb_ipca_spread is not None:
         include_info.append("CDB_IPCA")
 
     if include_info:
@@ -425,9 +418,7 @@ async def compare_investments_endpoint(
             lca_ipca_spread=lca_ipca_spread,
             cdb_ipca_spread=cdb_ipca_spread,
             include_poupanca=include_poupanca,
-            include_selic=include_selic,
             include_btc=include_btc,
-            include_cdb_ipca=include_cdb_ipca,
             start_date_param=start_date,
             end_date_param=end_date,
         )

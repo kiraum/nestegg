@@ -97,7 +97,5 @@ export interface FormData {
     lca_ipca_spread?: number;
     cdb_ipca_spread?: number;
     include_poupanca?: boolean;
-    include_selic?: boolean;
     include_btc?: boolean;
-    include_cdb_ipca?: boolean;
 }

@@ -80,9 +80,7 @@ class InvestmentCalculator:
         lca_ipca_spread: float | None = None,
         cdb_ipca_spread: float | None = None,
         include_poupanca: bool = False,
-        include_selic: bool = False,
         include_btc: bool = False,
-        include_cdb_ipca: bool = False,
         start_date_param: date | None = None,
         end_date_param: date | None = None,
     ) -> list[dict]:
@@ -104,9 +102,7 @@ class InvestmentCalculator:
             lca_ipca_spread: Optional spread to add to IPCA for LCA_IPCA investment type
             cdb_ipca_spread: Optional spread to add to IPCA for CDB_IPCA investment type
             include_poupanca: Whether to include Poupança in the comparison
-            include_selic: Whether to include SELIC in the comparison (only needed if selic_spread is None)
             include_btc: Whether to include Bitcoin in the comparison
-            include_cdb_ipca: Whether to include CDB_IPCA in the comparison (only needed if cdb_ipca_spread is None)
             start_date_param: Optional explicit start date (overrides calculation from period_years)
             end_date_param: Optional explicit end date (overrides calculation from period_years)
 
@@ -128,9 +124,7 @@ class InvestmentCalculator:
         logger.debug("  lca_ipca_spread: %s", lca_ipca_spread)
         logger.debug("  cdb_ipca_spread: %s", cdb_ipca_spread)
         logger.debug("  include_poupanca: %s", include_poupanca)
-        logger.debug("  include_selic: %s", include_selic)
         logger.debug("  include_btc: %s", include_btc)
-        logger.debug("  include_cdb_ipca: %s", include_cdb_ipca)
         logger.debug("  start_date_param: %s", start_date_param)
         logger.debug("  end_date_param: %s", end_date_param)
 
@@ -213,8 +207,8 @@ class InvestmentCalculator:
                 except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating Poupança: %s", e)
 
-            # Compare SELIC
-            if include_selic or selic_spread is not None:
+            # Compare SELIC if spread provided
+            if selic_spread is not None:
                 try:
                     logger.debug("Calculating SELIC investment")
                     # Update calculation with selic_spread if provided
@@ -555,14 +549,9 @@ class InvestmentCalculator:
                 except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCA IPCA+: %s", e)
 
-            # Compare CDB IPCA+ if spread provided or explicitly included
-            if cdb_ipca_spread is not None or include_cdb_ipca:
+            # Compare CDB IPCA+ if spread provided
+            if cdb_ipca_spread is not None:
                 try:
-                    # If include_cdb_ipca is True but no spread is provided, use a default spread
-                    if cdb_ipca_spread is None and include_cdb_ipca:
-                        cdb_ipca_spread = 5.5  # Default spread of 5.5%
-                        logger.debug("Using default spread for CDB IPCA+: %.2f%%", cdb_ipca_spread)
-
                     logger.debug("Calculating CDB IPCA+ with spread: %.2f%%", cdb_ipca_spread)
                     cdb_ipca_request = InvestmentRequest(
                         investment_type=InvestmentType.CDB_IPCA,
