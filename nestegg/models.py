@@ -103,6 +103,18 @@ class InvestmentRequest(BaseModel):
         return days / 365
 
 
+class FGCCoverage(BaseModel):
+    """Model for FGC (Fundo Garantidor de Créditos) coverage information."""
+
+    is_covered: bool = Field(..., description="Whether the investment is covered by FGC")
+    covered_amount: float = Field(..., description="Amount covered by the FGC guarantee")
+    uncovered_amount: float = Field(..., description="Amount not covered by the FGC guarantee")
+    coverage_percentage: float = Field(..., description="Percentage of the investment covered by FGC")
+    limit_per_institution: Optional[float] = Field(None, description="FGC coverage limit per financial institution")
+    total_coverage_limit: Optional[float] = Field(None, description="Total FGC coverage limit across institutions")
+    description: str = Field(..., description="Human-readable description of the FGC coverage")
+
+
 class TaxInfo(BaseModel):
     """Model for tax information."""
 
@@ -127,3 +139,4 @@ class InvestmentResponse(BaseModel):
     end_date: date
     rate: float
     tax_info: TaxInfo
+    fgc_coverage: FGCCoverage

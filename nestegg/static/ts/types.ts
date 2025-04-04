@@ -30,6 +30,17 @@ export interface TaxInfo {
     tax_period_description: string;
 }
 
+// FGC coverage information interface
+export interface FGCCoverage {
+    is_covered: boolean;
+    covered_amount: number;
+    uncovered_amount: number;
+    coverage_percentage: number;
+    limit_per_institution?: number;
+    total_coverage_limit?: number;
+    description: string;
+}
+
 // Investment calculation request
 export interface InvestmentRequest {
     investment_type: InvestmentType;
@@ -57,6 +68,7 @@ export interface InvestmentResponse {
     end_date: string;
     rate: number;
     tax_info: TaxInfo;
+    fgc_coverage: FGCCoverage;
 }
 
 // Comparison response with additional recommendation

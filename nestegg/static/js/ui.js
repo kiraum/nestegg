@@ -8,8 +8,8 @@ function getFriendlyName(typeId) {
         'lca': 'LCA (Prefixado)',
         'selic': 'Tesouro SELIC',
         'poupanca': 'Poupança',
-        'ipca': 'IPCA+',
-        'cdi': 'CDI',
+        'ipca': 'Tesouro IPCA+',
+        'cdi': 'CDB (% do CDI)',
         'btc': 'Bitcoin (BTC)',
         'lci_cdi': 'LCI (% do CDI)',
         'lca_cdi': 'LCA (% do CDI)',
@@ -28,14 +28,11 @@ function getInvestmentCategory(typeId) {
     else if (typeId.startsWith('lca')) {
         return 'LCA';
     }
-    else if (typeId === 'cdb') {
+    else if (typeId === 'cdb' || typeId === 'cdi') {
         return 'CDB';
     }
     else if (typeId === 'selic' || typeId === 'ipca') {
         return 'Tesouro';
-    }
-    else if (typeId === 'cdi') {
-        return 'CDI';
     }
     else if (typeId === 'poupanca') {
         return 'Poupança';
@@ -410,8 +407,48 @@ export function renderInvestmentResult(result, container) {
             <p><strong>Tax Period:</strong> ${result.tax_info.tax_period_description}</p>
             <p><strong>Period:</strong> ${new Date(result.start_date).toLocaleDateString()} to ${new Date(result.end_date).toLocaleDateString()}</p>
         </div>
+        ${renderFGCCoverageInfo(result.fgc_coverage)}
     `;
     container.appendChild(resultCard);
+}
+/**
+ * Render FGC coverage information
+ */
+function renderFGCCoverageInfo(fgcCoverage) {
+    if (!fgcCoverage)
+        return '';
+    let coverageClass = fgcCoverage.is_covered ? 'text-success' : 'text-danger';
+    let coverageBadge = fgcCoverage.is_covered
+        ? `<span class="badge bg-success">Covered</span>`
+        : `<span class="badge bg-danger">Not Covered</span>`;
+    let coverageDetails = '';
+    if (fgcCoverage.is_covered) {
+        const coveragePercentage = formatPercentage(fgcCoverage.coverage_percentage);
+        coverageDetails = `
+            <div class="row mt-2">
+                <div class="col-md-6">
+                    <p><span class="label">Covered Amount:</span> <span class="value">${formatCurrency(fgcCoverage.covered_amount)}</span></p>
+                </div>
+                <div class="col-md-6">
+                    <p><span class="label">Coverage:</span> <span class="value">${coveragePercentage}</span></p>
+                </div>
+            </div>
+        `;
+        if (fgcCoverage.uncovered_amount > 0) {
+            coverageDetails += `
+                <div class="alert alert-warning mt-2">
+                    <small>Warning: ${formatCurrency(fgcCoverage.uncovered_amount)} exceeds the FGC guarantee limit and is not covered.</small>
+                </div>
+            `;
+        }
+    }
+    return `
+        <div class="fgc-coverage-info mt-3 p-3 border rounded">
+            <h5 class="mb-2">FGC Guarantee Coverage ${coverageBadge}</h5>
+            <p>${fgcCoverage.description}</p>
+            ${coverageDetails}
+        </div>
+    `;
 }
 /**
  * Render comparison results
@@ -434,8 +471,15 @@ export function renderComparisonResults(results, container) {
         const taxFreeLabel = result.tax_free
             ? '<span class="tax-free-badge">Tax Free</span>'
             : '';
+        // FGC Coverage badge
+        let fgcBadge = '';
+        if (result.fgc_coverage) {
+            fgcBadge = result.fgc_coverage.is_covered
+                ? '<span class="badge bg-success ms-1">FGC Covered</span>'
+                : '';
+        }
         resultCard.innerHTML = `
-            <h5>${result.type} ${taxFreeLabel}</h5>
+            <h5>${result.type} ${taxFreeLabel} ${fgcBadge}</h5>
             <p class="recommendation">${result.recommendation}</p>
             <div class="row result-values">
                 <div class="col-md-6">
@@ -447,6 +491,10 @@ export function renderComparisonResults(results, container) {
                     <p><span class="label">Tax Amount:</span> <span class="value">${formatCurrency(result.tax_amount)}</span></p>
                 </div>
             </div>
+            ${result.fgc_coverage && result.fgc_coverage.uncovered_amount > 0 ?
+            `<div class="alert alert-warning mt-2 p-2">
+                    <small>Warning: ${formatCurrency(result.fgc_coverage.uncovered_amount)} exceeds FGC limit</small>
+                </div>` : ''}
         `;
         container.appendChild(resultCard);
     });
