@@ -2,12 +2,14 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #f5f7fa;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .card {
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     margin-bottom: 1.5rem;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .card-header {
@@ -195,4 +197,177 @@ body {
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-10px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dark Mode Styles */
+.dark-mode {
+    color: #e2e8f0;
+    background-color: #1a202c;
+}
+
+.dark-mode .card {
+    background-color: #2d3748;
+    border-color: #4a5568;
+}
+
+.dark-mode .card-body {
+    background-color: #2d3748;
+    color: #e2e8f0;
+}
+
+.dark-mode .card-header {
+    background-color: #4c51bf;
+    color: white;
+}
+
+.dark-mode .text-muted {
+    color: #a0aec0 !important;
+}
+
+/* Fix for hidden values in comparison results */
+.dark-mode .result-card .value,
+.dark-mode .result-values .value,
+.dark-mode .result-highlight,
+.dark-mode table td,
+.dark-mode p strong,
+.dark-mode .result-card strong,
+.dark-mode #results-container strong,
+.dark-mode #results-container b,
+.dark-mode .chart-container,
+.dark-mode .numeric-value,
+.dark-mode #results-container span:not(.text-muted),
+.dark-mode #results-container div.value {
+    color: #e2e8f0 !important;
+}
+
+.dark-mode .result-card .label,
+.dark-mode .result-values .label,
+.dark-mode #results-container label {
+    color: #a0aec0 !important;
+}
+
+.dark-mode .btn-outline-secondary {
+    color: #a0aec0;
+    border-color: #4a5568;
+}
+
+.dark-mode .btn-outline-secondary:hover {
+    background-color: #4a5568;
+    color: #e2e8f0;
+}
+
+.dark-mode .btn-primary {
+    background-color: #5a67d8;
+    border-color: #4c51bf;
+}
+
+.dark-mode .investment-type-item {
+    color: #e2e8f0;
+}
+
+.dark-mode .investment-type-item:hover {
+    background-color: #2d3748;
+}
+
+.dark-mode .investment-type-item.active {
+    background-color: #2d3748;
+    border-left: 4px solid #5a67d8;
+}
+
+.dark-mode .selected-investment {
+    background-color: #2d3748;
+    border-left: 3px solid #5a67d8 !important;
+}
+
+.dark-mode .parameter-section {
+    background-color: #2d3748;
+}
+
+.dark-mode .form-control {
+    background-color: #4a5568;
+    border-color: #2d3748;
+    color: #e2e8f0;
+}
+
+.dark-mode .input-group-text {
+    background-color: #4a5568;
+    border-color: #2d3748;
+    color: #e2e8f0;
+}
+
+.dark-mode .footer {
+    background-color: #2d3748 !important;
+}
+
+.dark-mode .bg-light {
+    background-color: #2d3748 !important;
+}
+
+.dark-mode .result-card {
+    background-color: #2d3748;
+    border-color: #4a5568;
+}
+
+.dark-mode .best-option {
+    background-color: #234e52;
+    border-left: 4px solid #38a169;
+}
+
+.dark-mode .category-title {
+    color: #a0aec0;
+    border-bottom: 1px solid #4a5568;
+}
+
+.dark-mode .parameters-list li {
+    border-bottom: 1px solid #4a5568;
+}
+
+.dark-mode .rate-info {
+    color: #7f9cf5 !important;
+}
+
+.dark-mode .param-indicator {
+    color: #a0aec0;
+}
+
+.dark-mode table {
+    color: #e2e8f0;
+}
+
+.dark-mode hr {
+    border-color: #4a5568;
+}
+
+/* Dark mode toggle button */
+#dark-mode-toggle {
+    transition: all 0.3s ease;
+}
+
+.dark-mode #dark-mode-toggle .bi-moon-fill {
+    display: none;
+}
+
+.dark-mode #dark-mode-toggle .bi-sun-fill {
+    display: inline-block;
+}
+
+.dark-mode #dark-mode-toggle .dark-mode-text {
+    display: none;
+}
+
+.dark-mode #dark-mode-toggle .light-mode-text {
+    display: inline;
+}
+
+#dark-mode-toggle .bi-sun-fill {
+    display: none;
+}
+
+#dark-mode-toggle .light-mode-text {
+    display: none;
+}
+
+/* Make chart legends visible in dark mode */
+.dark-mode canvas {
+    filter: brightness(0.8) contrast(1.2);
 }
