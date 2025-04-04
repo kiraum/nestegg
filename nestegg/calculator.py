@@ -6,8 +6,9 @@ import logging
 from datetime import date, timedelta
 from typing import Optional
 
+from .constants import FGC_GUARANTEED_INVESTMENTS, GOVT_GUARANTEED_INVESTMENTS
 from .external_api import BCBApiClient, CryptoApiClient
-from .models import InvestmentRequest, InvestmentType
+from .models import FGCCoverage, InvestmentRequest, InvestmentType
 from .tax_calculator import TaxCalculator
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 class InvestmentCalculator:
     """Calculator for investment returns."""
+
+    # FGC (Fundo Garantidor de Créditos) guarantee limits
+    FGC_LIMIT_PER_INSTITUTION = 250000.0  # R$ 250,000 per CPF/CNPJ per financial institution
+    FGC_TOTAL_LIMIT = 1000000.0  # R$ 1,000,000 total per CPF/CNPJ across all institutions
 
     def __init__(
         self,
@@ -73,10 +78,11 @@ class InvestmentCalculator:
         lca_cdi_percentage: float | None = None,
         lci_ipca_spread: float | None = None,
         lca_ipca_spread: float | None = None,
+        cdb_ipca_spread: float | None = None,
         include_poupanca: bool = False,
         include_selic: bool = False,
-        include_cdi: bool = False,
         include_btc: bool = False,
+        include_cdb_ipca: bool = False,
         start_date_param: date | None = None,
         end_date_param: date | None = None,
     ) -> list[dict]:
@@ -96,10 +102,11 @@ class InvestmentCalculator:
             lca_cdi_percentage: Optional percentage of CDI for LCA_CDI investment type
             lci_ipca_spread: Optional spread to add to IPCA for LCI_IPCA investment type
             lca_ipca_spread: Optional spread to add to IPCA for LCA_IPCA investment type
+            cdb_ipca_spread: Optional spread to add to IPCA for CDB_IPCA investment type
             include_poupanca: Whether to include Poupança in the comparison
-            include_selic: Whether to include SELIC in the comparison
-            include_cdi: Whether to include CDI in the comparison
+            include_selic: Whether to include SELIC in the comparison (only needed if selic_spread is None)
             include_btc: Whether to include Bitcoin in the comparison
+            include_cdb_ipca: Whether to include CDB_IPCA in the comparison (only needed if cdb_ipca_spread is None)
             start_date_param: Optional explicit start date (overrides calculation from period_years)
             end_date_param: Optional explicit end date (overrides calculation from period_years)
 
@@ -119,10 +126,11 @@ class InvestmentCalculator:
         logger.debug("  lca_cdi_percentage: %s", lca_cdi_percentage)
         logger.debug("  lci_ipca_spread: %s", lci_ipca_spread)
         logger.debug("  lca_ipca_spread: %s", lca_ipca_spread)
+        logger.debug("  cdb_ipca_spread: %s", cdb_ipca_spread)
         logger.debug("  include_poupanca: %s", include_poupanca)
         logger.debug("  include_selic: %s", include_selic)
-        logger.debug("  include_cdi: %s", include_cdi)
         logger.debug("  include_btc: %s", include_btc)
+        logger.debug("  include_cdb_ipca: %s", include_cdb_ipca)
         logger.debug("  start_date_param: %s", start_date_param)
         logger.debug("  end_date_param: %s", end_date_param)
 
@@ -172,7 +180,7 @@ class InvestmentCalculator:
         try:
             # Get current market rates for reference
             selic_rate = await self.api_client.get_selic_rate(target_date)
-            cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
+            cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDB_CDI, target_date)
             logger.debug("Current SELIC rate: %.2f%%", selic_rate * 100)
             logger.debug("Current CDI rate: %.2f%%", cdi_rate * 100)
 
@@ -198,51 +206,82 @@ class InvestmentCalculator:
                             "tax_amount": poupanca_result["tax_amount"],
                             "final_amount": poupanca_result["final_amount"],
                             "tax_free": poupanca_result["tax_info"]["is_tax_free"],
-                            "tax_info": poupanca_result["tax_info"],
+                            "fgc_coverage": poupanca_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added Poupança to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating Poupança investment")
+                    logger.debug("Added Poupança to comparison with rate: %.2f%%", poupanca_rate * 100)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating Poupança: %s", e)
 
             # Compare SELIC
             if include_selic or selic_spread is not None:
-                spread = selic_spread or 0.0  # Default to 0 if None
                 try:
-                    logger.debug("Calculating SELIC investment with spread: %.2f%%", spread)
+                    logger.debug("Calculating SELIC investment")
+                    # Update calculation with selic_spread if provided
+                    selic_rate_with_spread = selic_rate + (selic_spread or 0) / 100
+                    logger.debug("SELIC rate with spread: %.2f%%", selic_rate_with_spread * 100)
+
                     selic_request = InvestmentRequest(
                         investment_type=InvestmentType.SELIC,
                         initial_amount=initial_amount,
                         start_date=start_date,
                         end_date=target_date,
-                        selic_spread=spread,
+                        selic_spread=selic_spread,
                     )
                     selic_result = await self.calculate_investment(selic_request)
-
-                    # Format the display name based on the spread
-                    selic_display = "SELIC" if spread == 0 else f"Tesouro SELIC+{spread:.2f}%"
-
                     comparisons.append(
                         {
-                            "type": selic_display,
-                            "rate": selic_rate * 100 + spread,  # Add spread to display rate
+                            "type": "Tesouro SELIC" + (f"+{selic_spread}%" if selic_spread else ""),
+                            "rate": selic_rate_with_spread * 100,
                             "effective_rate": selic_result["effective_rate"],
                             "gross_profit": selic_result["gross_profit"],
                             "net_profit": selic_result["net_profit"],
                             "tax_amount": selic_result["tax_amount"],
                             "final_amount": selic_result["final_amount"],
                             "tax_free": selic_result["tax_info"]["is_tax_free"],
-                            "tax_info": selic_result["tax_info"],
+                            "fgc_coverage": selic_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added SELIC to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating SELIC investment")
+                    logger.debug(
+                        "Added SELIC to comparison with rate: %.2f%%",
+                        selic_rate_with_spread * 100,
+                    )
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating SELIC: %s", e)
 
-            # Compare IPCA
+            # Compare LCA if rate provided
+            if lca_rate:
+                try:
+                    logger.debug("Calculating LCA investment")
+                    lca_request = InvestmentRequest(
+                        investment_type=InvestmentType.LCA,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        rate=lca_rate / 100,  # Convert from percentage to decimal
+                    )
+                    lca_result = await self.calculate_investment(lca_request)
+                    comparisons.append(
+                        {
+                            "type": f"LCA {lca_rate}%",
+                            "rate": lca_rate,
+                            "effective_rate": lca_result["effective_rate"],
+                            "gross_profit": lca_result["gross_profit"],
+                            "net_profit": lca_result["net_profit"],
+                            "tax_amount": lca_result["tax_amount"],
+                            "final_amount": lca_result["final_amount"],
+                            "tax_free": lca_result["tax_info"]["is_tax_free"],
+                            "fgc_coverage": lca_result["fgc_coverage"],
+                        }
+                    )
+                    logger.debug("Added LCA to comparison with rate: %.2f%%", lca_rate)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCA: %s", e)
+
+            # Compare IPCA+ if spread provided
             if ipca_spread is not None:
                 try:
-                    logger.debug("Calculating IPCA investment with spread: %.2f%%", ipca_spread)
+                    logger.debug("Calculating IPCA+ investment with spread: %.2f%%", ipca_spread)
                     ipca_request = InvestmentRequest(
                         investment_type=InvestmentType.IPCA,
                         initial_amount=initial_amount,
@@ -251,14 +290,12 @@ class InvestmentCalculator:
                         ipca_spread=ipca_spread,
                     )
                     ipca_result = await self.calculate_investment(ipca_request)
+                    # Get current IPCA rate for display
                     ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
-
-                    # Format the display name based on the spread
-                    ipca_display = "IPCA" if ipca_spread == 0 else f"Tesouro IPCA+{ipca_spread:.2f}%"
 
                     comparisons.append(
                         {
-                            "type": ipca_display,
+                            "type": f"Tesouro IPCA+{ipca_spread}%",
                             "rate": ipca_rate * 100 + ipca_spread,  # Add spread to display rate
                             "effective_rate": ipca_result["effective_rate"],
                             "gross_profit": ipca_result["gross_profit"],
@@ -266,48 +303,45 @@ class InvestmentCalculator:
                             "tax_amount": ipca_result["tax_amount"],
                             "final_amount": ipca_result["final_amount"],
                             "tax_free": ipca_result["tax_info"]["is_tax_free"],
-                            "tax_info": ipca_result["tax_info"],
+                            "fgc_coverage": ipca_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added IPCA to comparisons")
-                except Exception as ipca_error:  # pylint: disable=broad-exception-caught
-                    # Use warning level instead of error for IPCA issues, since we expect fallbacks to handle them
-                    logger.warning("IPCA investment calculation issue: %s", str(ipca_error))
-                    # Continue with other calculations - don't let IPCA failure stop the entire comparison
+                    logger.debug("Added IPCA to comparison with rate: %.2f%% + %.2f%%", ipca_rate * 100, ipca_spread)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating IPCA: %s", e)
 
-            # Compare CDI
-            if include_cdi or cdi_percentage is not None:
-                percentage = cdi_percentage or 100.0  # Default to 100% if None
+            # Compare CDI if percentage is provided
+            if cdi_percentage is not None:
                 try:
+                    percentage = cdi_percentage
                     logger.debug("Calculating CDI investment with percentage: %.2f%%", percentage)
                     cdi_request = InvestmentRequest(
-                        investment_type=InvestmentType.CDI,
+                        investment_type=InvestmentType.CDB_CDI,
                         initial_amount=initial_amount,
                         start_date=start_date,
                         end_date=target_date,
                         cdi_percentage=percentage,
                     )
                     cdi_result = await self.calculate_investment(cdi_request)
-
-                    # Format the display name based on the percentage
-                    cdi_display = "CDI" if percentage == 100.0 else f"CDB {percentage:.2f}% CDI"
+                    # Format display name based on percentage
+                    cdi_display = "CDB 100% CDI" if percentage == 100.0 else f"CDB {percentage}% CDI"
 
                     comparisons.append(
                         {
                             "type": cdi_display,
-                            "rate": cdi_rate * 100 * (percentage / 100.0),  # Adjust rate by percentage
+                            "rate": cdi_rate * percentage / 100,  # Calculate effective rate
                             "effective_rate": cdi_result["effective_rate"],
                             "gross_profit": cdi_result["gross_profit"],
                             "net_profit": cdi_result["net_profit"],
                             "tax_amount": cdi_result["tax_amount"],
                             "final_amount": cdi_result["final_amount"],
                             "tax_free": cdi_result["tax_info"]["is_tax_free"],
-                            "tax_info": cdi_result["tax_info"],
+                            "fgc_coverage": cdi_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added CDI to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating CDI investment")
+                    logger.debug("Added CDI to comparison with percentage: %.2f%%", percentage)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating CDI: %s", e)
 
             # Compare CDB
             if cdb_rate is not None:
@@ -323,7 +357,7 @@ class InvestmentCalculator:
                     cdb_result = await self.calculate_investment(cdb_request)
                     comparisons.append(
                         {
-                            "type": "CDB Prefixado " + f"{cdb_rate:.2f}%",
+                            "type": f"CDB Prefixado {cdb_rate}%",
                             "rate": cdb_rate,
                             "effective_rate": cdb_result["effective_rate"],
                             "gross_profit": cdb_result["gross_profit"],
@@ -331,12 +365,12 @@ class InvestmentCalculator:
                             "tax_amount": cdb_result["tax_amount"],
                             "final_amount": cdb_result["final_amount"],
                             "tax_free": cdb_result["tax_info"]["is_tax_free"],
-                            "tax_info": cdb_result["tax_info"],
+                            "fgc_coverage": cdb_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added CDB to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating CDB investment")
+                    logger.debug("Added CDB to comparison with rate: %.2f%%", cdb_rate)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating CDB: %s", e)
 
             # Compare LCI
             if lci_rate is not None:
@@ -352,7 +386,7 @@ class InvestmentCalculator:
                     lci_result = await self.calculate_investment(lci_request)
                     comparisons.append(
                         {
-                            "type": "LCI Prefixada " + f"{lci_rate:.2f}%",
+                            "type": f"LCI {lci_rate}%",
                             "rate": lci_rate,
                             "effective_rate": lci_result["effective_rate"],
                             "gross_profit": lci_result["gross_profit"],
@@ -360,82 +394,49 @@ class InvestmentCalculator:
                             "tax_amount": lci_result["tax_amount"],
                             "final_amount": lci_result["final_amount"],
                             "tax_free": lci_result["tax_info"]["is_tax_free"],
-                            "tax_info": lci_result["tax_info"],
+                            "fgc_coverage": lci_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added LCI to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCI investment")
-
-            # Compare LCA
-            if lca_rate is not None:
-                try:
-                    logger.debug("Calculating LCA investment with rate: %s%%", lca_rate)
-                    lca_request = InvestmentRequest(
-                        investment_type=InvestmentType.LCA,
-                        initial_amount=initial_amount,
-                        start_date=start_date,
-                        end_date=target_date,
-                        lca_rate=lca_rate,
-                    )
-                    lca_result = await self.calculate_investment(lca_request)
-                    comparisons.append(
-                        {
-                            "type": "LCA Prefixada " + f"{lca_rate:.2f}%",
-                            "rate": lca_rate,
-                            "effective_rate": lca_result["effective_rate"],
-                            "gross_profit": lca_result["gross_profit"],
-                            "net_profit": lca_result["net_profit"],
-                            "tax_amount": lca_result["tax_amount"],
-                            "final_amount": lca_result["final_amount"],
-                            "tax_free": lca_result["tax_info"]["is_tax_free"],
-                            "tax_info": lca_result["tax_info"],
-                        }
-                    )
-                    logger.debug("Added LCA to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCA investment")
+                    logger.debug("Added LCI to comparison with rate: %.2f%%", lci_rate)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCI: %s", e)
 
             # Include Bitcoin
             if include_btc:
                 try:
-                    logger.debug("Calculating Bitcoin investment with actual price data")
+                    logger.debug("Calculating Bitcoin investment")
+                    # We use a default 25% annual growth rate for BTC, but this can be adjusted
+                    btc_default_growth = 0.25  # Default BTC growth rate of 25% annually
                     btc_request = InvestmentRequest(
                         investment_type=InvestmentType.BTC,
                         initial_amount=initial_amount,
                         start_date=start_date,
                         end_date=target_date,
+                        rate=btc_default_growth,
                     )
-
-                    # Remove direct price retrieval and rely solely on calculate_investment
-                    # This ensures consistency with the calculate endpoint
-                    logger.debug("Using calculate_investment method for Bitcoin calculation")
-
                     btc_result = await self.calculate_investment(btc_request)
-
-                    logger.debug("Bitcoin calculation completed through calculate_investment method")
 
                     comparisons.append(
                         {
                             "type": "Bitcoin",
-                            "rate": btc_result["rate"],
+                            "rate": btc_default_growth * 100,  # Convert to percentage
                             "effective_rate": btc_result["effective_rate"],
                             "gross_profit": btc_result["gross_profit"],
                             "net_profit": btc_result["net_profit"],
                             "tax_amount": btc_result["tax_amount"],
                             "final_amount": btc_result["final_amount"],
                             "tax_free": btc_result["tax_info"]["is_tax_free"],
-                            "tax_info": btc_result["tax_info"],
+                            "fgc_coverage": btc_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added Bitcoin to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating Bitcoin investment")
+                    logger.debug("Added Bitcoin to comparison with growth rate: %.2f%%", btc_default_growth * 100)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating Bitcoin: %s", e)
 
-            # Add LCI_CDI comparison if percentage is provided
+            # Compare LCI CDI if percentage provided
             if lci_cdi_percentage is not None:
                 try:
-                    logger.debug("Calculating LCI_CDI investment with %.2f%% of CDI", lci_cdi_percentage)
+                    logger.debug("Calculating LCI CDI with percentage: %.2f%%", lci_cdi_percentage)
                     lci_cdi_request = InvestmentRequest(
                         investment_type=InvestmentType.LCI_CDI,
                         initial_amount=initial_amount,
@@ -444,32 +445,28 @@ class InvestmentCalculator:
                         cdi_percentage=lci_cdi_percentage,
                     )
                     lci_cdi_result = await self.calculate_investment(lci_cdi_request)
-                    cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
-
-                    # Format display name
-                    display_name = f"LCI {lci_cdi_percentage:.2f}% CDI"
 
                     comparisons.append(
                         {
-                            "type": display_name,
-                            "rate": cdi_rate * 100 * (lci_cdi_percentage / 100.0),  # Adjust rate by percentage
+                            "type": f"LCI {lci_cdi_percentage}% CDI",
+                            "rate": cdi_rate * lci_cdi_percentage / 100 * 100,  # Convert to percentage
                             "effective_rate": lci_cdi_result["effective_rate"],
                             "gross_profit": lci_cdi_result["gross_profit"],
                             "net_profit": lci_cdi_result["net_profit"],
                             "tax_amount": lci_cdi_result["tax_amount"],
                             "final_amount": lci_cdi_result["final_amount"],
                             "tax_free": lci_cdi_result["tax_info"]["is_tax_free"],
-                            "tax_info": lci_cdi_result["tax_info"],
+                            "fgc_coverage": lci_cdi_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added LCI_CDI to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCI_CDI investment")
+                    logger.debug("Added LCI CDI to comparison with percentage: %.2f%%", lci_cdi_percentage)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCI CDI: %s", e)
 
-            # Add LCA_CDI comparison if percentage is provided
+            # Compare LCA CDI if percentage provided
             if lca_cdi_percentage is not None:
                 try:
-                    logger.debug("Calculating LCA_CDI investment with %.2f%% of CDI", lca_cdi_percentage)
+                    logger.debug("Calculating LCA CDI with percentage: %.2f%%", lca_cdi_percentage)
                     lca_cdi_request = InvestmentRequest(
                         investment_type=InvestmentType.LCA_CDI,
                         initial_amount=initial_amount,
@@ -478,32 +475,28 @@ class InvestmentCalculator:
                         cdi_percentage=lca_cdi_percentage,
                     )
                     lca_cdi_result = await self.calculate_investment(lca_cdi_request)
-                    cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
-
-                    # Format display name
-                    display_name = f"LCA {lca_cdi_percentage:.2f}% CDI"
 
                     comparisons.append(
                         {
-                            "type": display_name,
-                            "rate": cdi_rate * 100 * (lca_cdi_percentage / 100.0),  # Adjust rate by percentage
+                            "type": f"LCA {lca_cdi_percentage}% CDI",
+                            "rate": cdi_rate * lca_cdi_percentage / 100 * 100,  # Convert to percentage
                             "effective_rate": lca_cdi_result["effective_rate"],
                             "gross_profit": lca_cdi_result["gross_profit"],
                             "net_profit": lca_cdi_result["net_profit"],
                             "tax_amount": lca_cdi_result["tax_amount"],
                             "final_amount": lca_cdi_result["final_amount"],
                             "tax_free": lca_cdi_result["tax_info"]["is_tax_free"],
-                            "tax_info": lca_cdi_result["tax_info"],
+                            "fgc_coverage": lca_cdi_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added LCA_CDI to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCA_CDI investment")
+                    logger.debug("Added LCA CDI to comparison with percentage: %.2f%%", lca_cdi_percentage)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCA CDI: %s", e)
 
-            # Add LCI_IPCA comparison if spread is provided
+            # Compare LCI IPCA+ if spread provided
             if lci_ipca_spread is not None:
                 try:
-                    logger.debug("Calculating LCI_IPCA investment with spread: +%.2f%%", lci_ipca_spread)
+                    logger.debug("Calculating LCI IPCA+ with spread: %.2f%%", lci_ipca_spread)
                     lci_ipca_request = InvestmentRequest(
                         investment_type=InvestmentType.LCI_IPCA,
                         initial_amount=initial_amount,
@@ -514,12 +507,9 @@ class InvestmentCalculator:
                     lci_ipca_result = await self.calculate_investment(lci_ipca_request)
                     ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
 
-                    # Format display name
-                    display_name = f"LCI IPCA+{lci_ipca_spread:.2f}%"
-
                     comparisons.append(
                         {
-                            "type": display_name,
+                            "type": f"LCI IPCA+{lci_ipca_spread}%",
                             "rate": ipca_rate * 100 + lci_ipca_spread,  # Add spread to display rate
                             "effective_rate": lci_ipca_result["effective_rate"],
                             "gross_profit": lci_ipca_result["gross_profit"],
@@ -527,17 +517,17 @@ class InvestmentCalculator:
                             "tax_amount": lci_ipca_result["tax_amount"],
                             "final_amount": lci_ipca_result["final_amount"],
                             "tax_free": lci_ipca_result["tax_info"]["is_tax_free"],
-                            "tax_info": lci_ipca_result["tax_info"],
+                            "fgc_coverage": lci_ipca_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added LCI_IPCA to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCI_IPCA investment")
+                    logger.debug("Added LCI IPCA+ to comparison with spread: %.2f%%", lci_ipca_spread)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCI IPCA+: %s", e)
 
-            # Add LCA_IPCA comparison if spread is provided
+            # Compare LCA IPCA+ if spread provided
             if lca_ipca_spread is not None:
                 try:
-                    logger.debug("Calculating LCA_IPCA investment with spread: +%.2f%%", lca_ipca_spread)
+                    logger.debug("Calculating LCA IPCA+ with spread: %.2f%%", lca_ipca_spread)
                     lca_ipca_request = InvestmentRequest(
                         investment_type=InvestmentType.LCA_IPCA,
                         initial_amount=initial_amount,
@@ -548,12 +538,9 @@ class InvestmentCalculator:
                     lca_ipca_result = await self.calculate_investment(lca_ipca_request)
                     ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
 
-                    # Format display name
-                    display_name = f"LCA IPCA+{lca_ipca_spread:.2f}%"
-
                     comparisons.append(
                         {
-                            "type": display_name,
+                            "type": f"LCA IPCA+{lca_ipca_spread}%",
                             "rate": ipca_rate * 100 + lca_ipca_spread,  # Add spread to display rate
                             "effective_rate": lca_ipca_result["effective_rate"],
                             "gross_profit": lca_ipca_result["gross_profit"],
@@ -561,12 +548,48 @@ class InvestmentCalculator:
                             "tax_amount": lca_ipca_result["tax_amount"],
                             "final_amount": lca_ipca_result["final_amount"],
                             "tax_free": lca_ipca_result["tax_info"]["is_tax_free"],
-                            "tax_info": lca_ipca_result["tax_info"],
+                            "fgc_coverage": lca_ipca_result["fgc_coverage"],
                         }
                     )
-                    logger.debug("Added LCA_IPCA to comparisons")
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.error("Error calculating LCA_IPCA investment")
+                    logger.debug("Added LCA IPCA+ to comparison with spread: %.2f%%", lca_ipca_spread)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating LCA IPCA+: %s", e)
+
+            # Compare CDB IPCA+ if spread provided or explicitly included
+            if cdb_ipca_spread is not None or include_cdb_ipca:
+                try:
+                    # If include_cdb_ipca is True but no spread is provided, use a default spread
+                    if cdb_ipca_spread is None and include_cdb_ipca:
+                        cdb_ipca_spread = 5.5  # Default spread of 5.5%
+                        logger.debug("Using default spread for CDB IPCA+: %.2f%%", cdb_ipca_spread)
+
+                    logger.debug("Calculating CDB IPCA+ with spread: %.2f%%", cdb_ipca_spread)
+                    cdb_ipca_request = InvestmentRequest(
+                        investment_type=InvestmentType.CDB_IPCA,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        ipca_spread=cdb_ipca_spread,
+                    )
+                    cdb_ipca_result = await self.calculate_investment(cdb_ipca_request)
+                    ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
+
+                    comparisons.append(
+                        {
+                            "type": f"CDB IPCA+{cdb_ipca_spread}%",
+                            "rate": ipca_rate * 100 + (cdb_ipca_spread or 0.0),  # Add spread to display rate
+                            "effective_rate": cdb_ipca_result["effective_rate"],
+                            "gross_profit": cdb_ipca_result["gross_profit"],
+                            "net_profit": cdb_ipca_result["net_profit"],
+                            "tax_amount": cdb_ipca_result["tax_amount"],
+                            "final_amount": cdb_ipca_result["final_amount"],
+                            "tax_free": cdb_ipca_result["tax_info"]["is_tax_free"],
+                            "fgc_coverage": cdb_ipca_result["fgc_coverage"],
+                        }
+                    )
+                    logger.debug("Added CDB IPCA+ to comparison with spread: %.2f%%", cdb_ipca_spread)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating CDB IPCA+: %s", e)
 
             # Sort by effective rate (highest first)
             if comparisons:
@@ -674,10 +697,17 @@ class InvestmentCalculator:
             request.cdb_rate,
             request.lci_rate,
             request.lca_rate,
-            request.period_years,
+            request.period_years if request.start_date and request.end_date else None,
         )
 
         try:
+            if request.start_date is None or request.end_date is None:
+                raise ValueError("Start date and end date must be provided")
+
+            # Calculate FGC coverage for this investment
+            fgc_coverage = self.calculate_fgc_coverage(request.investment_type, request.initial_amount)
+            logger.debug("FGC coverage: %s", fgc_coverage.description)
+
             # Log the period in days and years
             logger.debug(
                 "Investment period: %.2f years (%d days)",
@@ -1099,7 +1129,7 @@ class InvestmentCalculator:
                         logger.error("Error calculating IPCA investment")
 
                 # CDI investments
-                elif request.investment_type == InvestmentType.CDI:
+                elif request.investment_type == InvestmentType.CDB_CDI:
                     # Get the CDI rate
                     cdi_rate = await self.api_client.get_cdi_rate(request.end_date)
                     logger.debug("Raw CDI rate from API: %.4f%%", cdi_rate * 100)
@@ -1138,6 +1168,60 @@ class InvestmentCalculator:
                         request.initial_amount,
                         gross_profit,
                     )
+
+                # CDB IPCA investments
+                elif request.investment_type == InvestmentType.CDB_IPCA:
+                    logger.debug("CDB_IPCA investment detected with spread: +%.2f%%", request.ipca_spread or 0.0)
+                    if request.ipca_spread is None:
+                        raise ValueError("IPCA spread is required for CDB_IPCA investments")
+
+                    if request.end_date is None:
+                        raise ValueError("End date must be provided for CDB_IPCA investments")
+
+                    # Get the IPCA rate
+                    try:
+                        ipca_rate = await self.api_client.get_ipca_rate(request.end_date)
+                        logger.debug("Raw IPCA rate from API: %.4f%%", ipca_rate * 100)
+
+                        # Get the spread from the request
+                        ipca_spread = request.ipca_spread
+                        logger.debug("IPCA spread for CDB_IPCA: +%.2f%%", ipca_spread)
+
+                        # For IPCA, we'll use the actual IPCA rate plus the specified spread
+                        annual_rate = ipca_rate + (ipca_spread / 100)  # Convert spread percentage to decimal
+                        rate = annual_rate
+
+                        logger.debug(
+                            "Using IPCA%s rate for CDB_IPCA: %.4f%% (IPCA %.4f%% + %.2f%%)",
+                            f"+{ipca_spread}%" if ipca_spread > 0 else "",
+                            annual_rate * 100,
+                            ipca_rate * 100,
+                            ipca_spread,
+                        )
+
+                        # IPCA uses daily compounding (252 business days per year)
+                        daily_rate = rate / 252
+                        business_days = int(request.period_years * 252)
+                        logger.debug(
+                            "CDB_IPCA daily rate: %.6f%%, business days: %d",
+                            daily_rate * 100,
+                            business_days,
+                        )
+
+                        # Compound interest formula: P * (1 + r)^t - P
+                        gross_profit = (
+                            request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                        )
+                        logger.debug(
+                            "CDB_IPCA calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                            request.initial_amount,
+                            daily_rate,
+                            business_days,
+                            request.initial_amount,
+                            gross_profit,
+                        )
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        logger.error("Error calculating CDB_IPCA investment")
 
                 # Bitcoin investments
                 elif request.investment_type == InvestmentType.BTC:
@@ -1203,9 +1287,6 @@ class InvestmentCalculator:
             logger.debug("Gross profit: R$ %.2f", gross_profit)
 
             # Calculate tax amount
-            if request.start_date is None or request.end_date is None:
-                raise ValueError("Start date and end date must be provided for tax calculation")
-
             tax_amount = await self._calculate_tax(
                 request.investment_type,
                 request.start_date,
@@ -1244,6 +1325,7 @@ class InvestmentCalculator:
 
             tax_rate_percentage = tax_rate * 100  # Convert to percentage
 
+            # Once everything is calculated, include fgc_coverage in the response
             response = {
                 "investment_type": request.investment_type,
                 "initial_amount": request.initial_amount,
@@ -1255,6 +1337,7 @@ class InvestmentCalculator:
                 "start_date": request.start_date,
                 "end_date": request.end_date,
                 "rate": rate * 100,  # Convert to percentage for display
+                "fgc_coverage": fgc_coverage,
                 "tax_info": {
                     "tax_rate_percentage": tax_rate_percentage,
                     "tax_amount": tax_amount,
@@ -1425,3 +1508,57 @@ class InvestmentCalculator:
         tax_amount = gross_profit * rate
         logger.debug("Tax amount: R$ %.2f", tax_amount)
         return tax_amount
+
+    def calculate_fgc_coverage(self, investment_type: InvestmentType, amount: float) -> FGCCoverage:
+        """
+        Calculate FGC (Fundo Garantidor de Créditos) coverage for an investment.
+
+        FGC guarantees up to R$250,000 per person per financial institution
+        with a total limit of R$1,000,000 across all financial institutions.
+
+        Args:
+            investment_type: Type of investment
+            amount: Investment amount
+
+        Returns:
+            FGCCoverage object with coverage details
+        """
+        if investment_type in FGC_GUARANTEED_INVESTMENTS:
+            covered_amount = min(amount, self.FGC_LIMIT_PER_INSTITUTION)
+            covered_percentage = (covered_amount / amount) * 100 if amount > 0 else 0
+
+            return FGCCoverage(
+                is_covered=True,
+                covered_amount=covered_amount,
+                uncovered_amount=max(0, amount - self.FGC_LIMIT_PER_INSTITUTION),
+                coverage_percentage=min(100, covered_percentage),
+                limit_per_institution=self.FGC_LIMIT_PER_INSTITUTION,
+                total_coverage_limit=self.FGC_TOTAL_LIMIT,
+                description=(
+                    f"FGC covers up to R$ {self.FGC_LIMIT_PER_INSTITUTION:,.2f} per CPF/CNPJ per financial "
+                    f"institution, with a total limit of R$ {self.FGC_TOTAL_LIMIT:,.2f} across all institutions."
+                ),
+            )
+
+        if investment_type in GOVT_GUARANTEED_INVESTMENTS:
+            # Government bonds (SELIC, IPCA) have government guarantee
+            return FGCCoverage(
+                is_covered=True,
+                covered_amount=amount,
+                uncovered_amount=0,
+                coverage_percentage=100,
+                description="Fully guaranteed by the Brazilian government (Tesouro Nacional)",
+                limit_per_institution=None,
+                total_coverage_limit=None,
+            )
+
+        # BTC and other types have no guarantee
+        return FGCCoverage(
+            is_covered=False,
+            covered_amount=0,
+            uncovered_amount=amount,
+            coverage_percentage=0,
+            description="Not covered by FGC or government guarantee",
+            limit_per_institution=None,
+            total_coverage_limit=None,
+        )

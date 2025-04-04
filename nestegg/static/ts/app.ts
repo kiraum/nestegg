@@ -129,9 +129,17 @@ function getFormData(): FormData {
         } else if (selectedType === 'poupanca') {
             (data as any)['include_poupanca'] = true;
         } else if (selectedType === 'selic') {
-            (data as any)['include_selic'] = true;
-        } else if (selectedType === 'cdi') {
-            (data as any)['include_cdi'] = true;
+            // Only include the flag if no selic_spread is being provided
+            const selicinputVal = document.querySelector('input[name="selic_spread"]') as HTMLInputElement;
+            if (!selicinputVal || !selicinputVal.value) {
+                (data as any)['include_selic'] = true;
+            }
+        } else if (selectedType === 'cdb_ipca') {
+            // Only include the flag if no cdb_ipca_spread is being provided
+            const ipcaInputVal = document.querySelector('input[name="cdb_ipca_spread"]') as HTMLInputElement;
+            if (!ipcaInputVal || !ipcaInputVal.value) {
+                (data as any)['include_cdb_ipca'] = true;
+            }
         }
 
         // Get inputs from parameter sections in the investment types container

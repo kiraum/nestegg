@@ -5,6 +5,7 @@ Tax calculator module for investment returns.
 import logging
 from typing import Optional
 
+from .constants import TAX_FREE_INVESTMENTS
 from .models import InvestmentType
 
 logger = logging.getLogger(__name__)
@@ -53,15 +54,7 @@ class TaxCalculator:
         )
 
         # Tax-free investments
-        if investment_type in (
-            InvestmentType.POUPANCA,
-            InvestmentType.LCI,
-            InvestmentType.LCA,
-            InvestmentType.LCI_CDI,
-            InvestmentType.LCA_CDI,
-            InvestmentType.LCI_IPCA,
-            InvestmentType.LCA_IPCA,
-        ):
+        if investment_type in TAX_FREE_INVESTMENTS:
             logger.debug("No tax for %s investment", investment_type)
             return 0.0
 
@@ -87,22 +80,28 @@ class TaxCalculator:
                 )
                 return 0.0
 
-            tax_amount = gross_profit * 0.15
+            # Get tax rate based on profit amount
+            tax_rate = TaxCalculator._get_btc_tax_rate(gross_profit)
+            tax_amount = gross_profit * tax_rate
             logger.debug(
-                "Bitcoin sale amount (R$ %.2f) exceeds R$ 35,000 monthly threshold - 15%% tax: R$ %.2f",
+                "Bitcoin sale amount (R$ %.2f) exceeds R$ 35,000 monthly threshold - %.1f%% tax: R$ %.2f",
                 sale_amount,
+                tax_rate * 100,
                 tax_amount,
             )
             return tax_amount
 
         # CDB and CDI taxes
-        if investment_type in (InvestmentType.CDB, InvestmentType.CDI):
+        if investment_type in (InvestmentType.CDB, InvestmentType.CDB_CDI, InvestmentType.CDB_IPCA):
             if investment_type == InvestmentType.CDB and not cdb_rate:
                 raise ValueError("CDB rate is required for CDB investments")
 
             # IOF for up to 30 days
             if investment_period_days <= 30:
-                iof_rate = 0.96 - (investment_period_days * 0.032)  # Linear reduction
+                # IOF decreases from 96% to 0% over 30 days
+                # Formula: IOF rate = (30 - days) / 30 * 96%
+                days_remaining = max(0, 30 - investment_period_days)
+                iof_rate = (days_remaining / 30) * 0.96
                 tax_amount = gross_profit * iof_rate
                 logger.debug("Applied IOF rate: %.2f%%", iof_rate * 100)
                 return tax_amount
@@ -151,15 +150,7 @@ class TaxCalculator:
             Tax rate as a decimal (e.g., 0.15 for 15%)
         """
         # Tax-free investments
-        if investment_type in (
-            InvestmentType.POUPANCA,
-            InvestmentType.LCI,
-            InvestmentType.LCA,
-            InvestmentType.LCI_CDI,
-            InvestmentType.LCA_CDI,
-            InvestmentType.LCI_IPCA,
-            InvestmentType.LCA_IPCA,
-        ):
+        if investment_type in TAX_FREE_INVESTMENTS:
             return 0.0
 
         # Bitcoin - special tax rules in Brazil
@@ -180,15 +171,8 @@ class TaxCalculator:
                 if sale_amount <= 35000:
                     return 0.0
 
-                # For sales > R$ 35,000, apply progressive rates based on profit
-                if gross_profit <= 5_000_000:  # Up to R$ 5 million
-                    return 0.15
-                if gross_profit <= 10_000_000:  # R$ 5M to R$ 10M
-                    return 0.175
-                if gross_profit <= 30_000_000:  # R$ 10M to R$ 30M
-                    return 0.20
-                # Above R$ 30M
-                return 0.225
+                # For sales > R$ 35,000, get tax rate based on profit
+                return self._get_btc_tax_rate(gross_profit)
 
             # Default if we can't determine profit amount
             return 0.15
@@ -198,7 +182,8 @@ class TaxCalculator:
             InvestmentType.CDB,
             InvestmentType.SELIC,
             InvestmentType.IPCA,
-            InvestmentType.CDI,
+            InvestmentType.CDB_CDI,
+            InvestmentType.CDB_IPCA,
         ):
             for period_days, rate in self.CDB_TAX_RATES.items():
                 if days <= period_days:
@@ -208,3 +193,23 @@ class TaxCalculator:
             raise ValueError("Invalid investment period")
 
         raise ValueError(f"Unsupported investment type: {investment_type}")
+
+    @staticmethod
+    def _get_btc_tax_rate(gross_profit: float) -> float:
+        """
+        Get the appropriate Bitcoin tax rate based on profit amount.
+
+        Args:
+            gross_profit: The gross profit amount from the Bitcoin investment
+
+        Returns:
+            The applicable tax rate as a decimal
+        """
+        if gross_profit <= 5_000_000:  # Up to R$ 5 million
+            return 0.15
+        if gross_profit <= 10_000_000:  # R$ 5M to R$ 10M
+            return 0.175
+        if gross_profit <= 30_000_000:  # R$ 10M to R$ 30M
+            return 0.20
+        # Above R$ 30M
+        return 0.225

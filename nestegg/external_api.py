@@ -355,7 +355,7 @@ class BCBApiClient:
             return await self.get_poupanca_rate(target_date)
         if investment_type == InvestmentType.IPCA:
             return await self.get_ipca_rate(target_date)
-        if investment_type == InvestmentType.CDI:
+        if investment_type == InvestmentType.CDB_CDI:
             return await self.get_cdi_rate(target_date)
         if investment_type == InvestmentType.BTC:
             # For BTC, we don't get the rate through this API
@@ -835,7 +835,7 @@ class BCBApiClient:
 
         # For CDB investments, if target date is a weekend or holiday, find the last working day
         if (
-            investment_type in (InvestmentType.CDB, InvestmentType.CDI, InvestmentType.IPCA)
+            investment_type in (InvestmentType.CDB, InvestmentType.CDB_CDI, InvestmentType.IPCA)
             and target_date.weekday() >= 5
         ):  # Saturday (5) or Sunday (6)
             while target_date.weekday() >= 5:  # Saturday (5) or Sunday (6)
@@ -1161,7 +1161,7 @@ class BCBApiClient:
             historical_start_date: Optional start date to use for the API request
                                   (useful when getting patterns for future predictions)
         """
-        reference_date = self._get_reference_date(date_obj, InvestmentType.CDI)
+        reference_date = self._get_reference_date(date_obj, InvestmentType.CDB_CDI)
         logger.debug("Using reference date: %s", reference_date)
 
         # Use the provided date range or calculate from reference date

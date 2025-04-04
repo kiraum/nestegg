@@ -31,12 +31,13 @@ class InvestmentType(CaseInsensitiveEnum):
     SELIC = "selic"
     POUPANCA = "poupanca"
     IPCA = "ipca"
-    CDI = "cdi"
+    CDB_CDI = "cdi"  # Renamed from CDI for clarity (CDB with CDI indexation)
     BTC = "btc"
     LCI_CDI = "lci_cdi"
     LCA_CDI = "lca_cdi"
     LCI_IPCA = "lci_ipca"
     LCA_IPCA = "lca_ipca"
+    CDB_IPCA = "cdb_ipca"  # CDB with IPCA indexation
 
 
 class InvestmentRequest(BaseModel):
@@ -103,6 +104,18 @@ class InvestmentRequest(BaseModel):
         return days / 365
 
 
+class FGCCoverage(BaseModel):
+    """Model for FGC (Fundo Garantidor de Créditos) coverage information."""
+
+    is_covered: bool = Field(..., description="Whether the investment is covered by FGC")
+    covered_amount: float = Field(..., description="Amount covered by the FGC guarantee")
+    uncovered_amount: float = Field(..., description="Amount not covered by the FGC guarantee")
+    coverage_percentage: float = Field(..., description="Percentage of the investment covered by FGC")
+    limit_per_institution: Optional[float] = Field(None, description="FGC coverage limit per financial institution")
+    total_coverage_limit: Optional[float] = Field(None, description="Total FGC coverage limit across institutions")
+    description: str = Field(..., description="Human-readable description of the FGC coverage")
+
+
 class TaxInfo(BaseModel):
     """Model for tax information."""
 
@@ -127,3 +140,19 @@ class InvestmentResponse(BaseModel):
     end_date: date
     rate: float
     tax_info: TaxInfo
+    fgc_coverage: FGCCoverage
+
+
+class InvestmentComparisonResult(BaseModel):
+    """Response model for investment comparison result."""
+
+    type: str = Field(..., description="Investment type display name")
+    rate: float = Field(..., description="Investment rate in percentage")
+    effective_rate: float = Field(..., description="Effective annual rate after taxes")
+    gross_profit: float = Field(..., description="Gross profit before taxes")
+    net_profit: float = Field(..., description="Net profit after taxes")
+    tax_amount: float = Field(..., description="Amount of tax applied")
+    final_amount: float = Field(..., description="Final amount after the investment period")
+    tax_free: bool = Field(..., description="Whether this investment is tax-free")
+    fgc_coverage: bool = Field(..., description="Whether this investment has FGC coverage")
+    recommendation: str = Field(..., description="Recommendation based on comparison with other investments")
