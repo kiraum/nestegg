@@ -105,7 +105,10 @@ class TaxCalculator:
 
             # IOF for up to 30 days
             if investment_period_days <= 30:
-                iof_rate = 0.96 - (investment_period_days * 0.032)  # Linear reduction
+                # IOF decreases from 96% to 0% over 30 days
+                # Formula: IOF rate = (30 - days) / 30 * 96%
+                days_remaining = max(0, 30 - investment_period_days)
+                iof_rate = (days_remaining / 30) * 0.96
                 tax_amount = gross_profit * iof_rate
                 logger.debug("Applied IOF rate: %.2f%%", iof_rate * 100)
                 return tax_amount
