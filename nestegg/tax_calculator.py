@@ -87,10 +87,13 @@ class TaxCalculator:
                 )
                 return 0.0
 
-            tax_amount = gross_profit * 0.15
+            # Get tax rate based on profit amount
+            tax_rate = TaxCalculator._get_btc_tax_rate(gross_profit)
+            tax_amount = gross_profit * tax_rate
             logger.debug(
-                "Bitcoin sale amount (R$ %.2f) exceeds R$ 35,000 monthly threshold - 15%% tax: R$ %.2f",
+                "Bitcoin sale amount (R$ %.2f) exceeds R$ 35,000 monthly threshold - %.1f%% tax: R$ %.2f",
                 sale_amount,
+                tax_rate * 100,
                 tax_amount,
             )
             return tax_amount
@@ -180,15 +183,8 @@ class TaxCalculator:
                 if sale_amount <= 35000:
                     return 0.0
 
-                # For sales > R$ 35,000, apply progressive rates based on profit
-                if gross_profit <= 5_000_000:  # Up to R$ 5 million
-                    return 0.15
-                if gross_profit <= 10_000_000:  # R$ 5M to R$ 10M
-                    return 0.175
-                if gross_profit <= 30_000_000:  # R$ 10M to R$ 30M
-                    return 0.20
-                # Above R$ 30M
-                return 0.225
+                # For sales > R$ 35,000, get tax rate based on profit
+                return self._get_btc_tax_rate(gross_profit)
 
             # Default if we can't determine profit amount
             return 0.15
@@ -208,3 +204,23 @@ class TaxCalculator:
             raise ValueError("Invalid investment period")
 
         raise ValueError(f"Unsupported investment type: {investment_type}")
+
+    @staticmethod
+    def _get_btc_tax_rate(gross_profit: float) -> float:
+        """
+        Get the appropriate Bitcoin tax rate based on profit amount.
+
+        Args:
+            gross_profit: The gross profit amount from the Bitcoin investment
+
+        Returns:
+            The applicable tax rate as a decimal
+        """
+        if gross_profit <= 5_000_000:  # Up to R$ 5 million
+            return 0.15
+        if gross_profit <= 10_000_000:  # R$ 5M to R$ 10M
+            return 0.175
+        if gross_profit <= 30_000_000:  # R$ 10M to R$ 30M
+            return 0.20
+        # Above R$ 30M
+        return 0.225
