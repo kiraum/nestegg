@@ -33,7 +33,7 @@ A FastAPI application that helps you compare different Brazilian investment inde
 - Easy-to-use REST API
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kiraum/nestegg/main/nestegg/static/img/nestegg.png" alt="NesteEgg Logo" width="300"/>
+  <img src="https://raw.githubusercontent.com/kiraum/nestegg/main/nestegg/static/img/nestegg.png" alt="NesteEgg Logo" width="500" style="max-width: 100%; height: auto;"/>
 </p>
 
 ## Installation
