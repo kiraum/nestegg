@@ -92,7 +92,7 @@ class TaxCalculator:
             return tax_amount
 
         # CDB and CDI taxes
-        if investment_type in (InvestmentType.CDB, InvestmentType.CDB_CDI):
+        if investment_type in (InvestmentType.CDB, InvestmentType.CDB_CDI, InvestmentType.CDB_IPCA):
             if investment_type == InvestmentType.CDB and not cdb_rate:
                 raise ValueError("CDB rate is required for CDB investments")
 
@@ -183,6 +183,7 @@ class TaxCalculator:
             InvestmentType.SELIC,
             InvestmentType.IPCA,
             InvestmentType.CDB_CDI,
+            InvestmentType.CDB_IPCA,
         ):
             for period_days, rate in self.CDB_TAX_RATES.items():
                 if days <= period_days:

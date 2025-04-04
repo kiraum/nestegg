@@ -37,6 +37,7 @@ class InvestmentType(CaseInsensitiveEnum):
     LCA_CDI = "lca_cdi"
     LCI_IPCA = "lci_ipca"
     LCA_IPCA = "lca_ipca"
+    CDB_IPCA = "cdb_ipca"  # CDB with IPCA indexation
 
 
 class InvestmentRequest(BaseModel):
@@ -140,3 +141,18 @@ class InvestmentResponse(BaseModel):
     rate: float
     tax_info: TaxInfo
     fgc_coverage: FGCCoverage
+
+
+class InvestmentComparisonResult(BaseModel):
+    """Response model for investment comparison result."""
+
+    type: str = Field(..., description="Investment type display name")
+    rate: float = Field(..., description="Investment rate in percentage")
+    effective_rate: float = Field(..., description="Effective annual rate after taxes")
+    gross_profit: float = Field(..., description="Gross profit before taxes")
+    net_profit: float = Field(..., description="Net profit after taxes")
+    tax_amount: float = Field(..., description="Amount of tax applied")
+    final_amount: float = Field(..., description="Final amount after the investment period")
+    tax_free: bool = Field(..., description="Whether this investment is tax-free")
+    fgc_coverage: bool = Field(..., description="Whether this investment has FGC coverage")
+    recommendation: str = Field(..., description="Recommendation based on comparison with other investments")

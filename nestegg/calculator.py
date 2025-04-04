@@ -78,10 +78,11 @@ class InvestmentCalculator:
         lca_cdi_percentage: float | None = None,
         lci_ipca_spread: float | None = None,
         lca_ipca_spread: float | None = None,
+        cdb_ipca_spread: float | None = None,
         include_poupanca: bool = False,
         include_selic: bool = False,
-        include_cdi: bool = False,
         include_btc: bool = False,
+        include_cdb_ipca: bool = False,
         start_date_param: date | None = None,
         end_date_param: date | None = None,
     ) -> list[dict]:
@@ -101,10 +102,11 @@ class InvestmentCalculator:
             lca_cdi_percentage: Optional percentage of CDI for LCA_CDI investment type
             lci_ipca_spread: Optional spread to add to IPCA for LCI_IPCA investment type
             lca_ipca_spread: Optional spread to add to IPCA for LCA_IPCA investment type
+            cdb_ipca_spread: Optional spread to add to IPCA for CDB_IPCA investment type
             include_poupanca: Whether to include Poupança in the comparison
-            include_selic: Whether to include SELIC in the comparison
-            include_cdi: Whether to include CDI in the comparison
+            include_selic: Whether to include SELIC in the comparison (only needed if selic_spread is None)
             include_btc: Whether to include Bitcoin in the comparison
+            include_cdb_ipca: Whether to include CDB_IPCA in the comparison (only needed if cdb_ipca_spread is None)
             start_date_param: Optional explicit start date (overrides calculation from period_years)
             end_date_param: Optional explicit end date (overrides calculation from period_years)
 
@@ -124,10 +126,11 @@ class InvestmentCalculator:
         logger.debug("  lca_cdi_percentage: %s", lca_cdi_percentage)
         logger.debug("  lci_ipca_spread: %s", lci_ipca_spread)
         logger.debug("  lca_ipca_spread: %s", lca_ipca_spread)
+        logger.debug("  cdb_ipca_spread: %s", cdb_ipca_spread)
         logger.debug("  include_poupanca: %s", include_poupanca)
         logger.debug("  include_selic: %s", include_selic)
-        logger.debug("  include_cdi: %s", include_cdi)
         logger.debug("  include_btc: %s", include_btc)
+        logger.debug("  include_cdb_ipca: %s", include_cdb_ipca)
         logger.debug("  start_date_param: %s", start_date_param)
         logger.debug("  end_date_param: %s", end_date_param)
 
@@ -211,7 +214,7 @@ class InvestmentCalculator:
                     logger.error("Error calculating Poupança: %s", e)
 
             # Compare SELIC
-            if include_selic:
+            if include_selic or selic_spread is not None:
                 try:
                     logger.debug("Calculating SELIC investment")
                     # Update calculation with selic_spread if provided
@@ -307,10 +310,10 @@ class InvestmentCalculator:
                 except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating IPCA: %s", e)
 
-            # Compare CDI
-            if include_cdi or cdi_percentage not in (None, 100.0):
+            # Compare CDI if percentage is provided
+            if cdi_percentage is not None:
                 try:
-                    percentage = cdi_percentage or 100.0
+                    percentage = cdi_percentage
                     logger.debug("Calculating CDI investment with percentage: %.2f%%", percentage)
                     cdi_request = InvestmentRequest(
                         investment_type=InvestmentType.CDB_CDI,
@@ -551,6 +554,42 @@ class InvestmentCalculator:
                     logger.debug("Added LCA IPCA+ to comparison with spread: %.2f%%", lca_ipca_spread)
                 except (ValueError, KeyError, TypeError) as e:
                     logger.error("Error calculating LCA IPCA+: %s", e)
+
+            # Compare CDB IPCA+ if spread provided or explicitly included
+            if cdb_ipca_spread is not None or include_cdb_ipca:
+                try:
+                    # If include_cdb_ipca is True but no spread is provided, use a default spread
+                    if cdb_ipca_spread is None and include_cdb_ipca:
+                        cdb_ipca_spread = 5.5  # Default spread of 5.5%
+                        logger.debug("Using default spread for CDB IPCA+: %.2f%%", cdb_ipca_spread)
+
+                    logger.debug("Calculating CDB IPCA+ with spread: %.2f%%", cdb_ipca_spread)
+                    cdb_ipca_request = InvestmentRequest(
+                        investment_type=InvestmentType.CDB_IPCA,
+                        initial_amount=initial_amount,
+                        start_date=start_date,
+                        end_date=target_date,
+                        ipca_spread=cdb_ipca_spread,
+                    )
+                    cdb_ipca_result = await self.calculate_investment(cdb_ipca_request)
+                    ipca_rate = await self.api_client.get_investment_rate(InvestmentType.IPCA, target_date)
+
+                    comparisons.append(
+                        {
+                            "type": f"CDB IPCA+{cdb_ipca_spread}%",
+                            "rate": ipca_rate * 100 + (cdb_ipca_spread or 0.0),  # Add spread to display rate
+                            "effective_rate": cdb_ipca_result["effective_rate"],
+                            "gross_profit": cdb_ipca_result["gross_profit"],
+                            "net_profit": cdb_ipca_result["net_profit"],
+                            "tax_amount": cdb_ipca_result["tax_amount"],
+                            "final_amount": cdb_ipca_result["final_amount"],
+                            "tax_free": cdb_ipca_result["tax_info"]["is_tax_free"],
+                            "fgc_coverage": cdb_ipca_result["fgc_coverage"],
+                        }
+                    )
+                    logger.debug("Added CDB IPCA+ to comparison with spread: %.2f%%", cdb_ipca_spread)
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.error("Error calculating CDB IPCA+: %s", e)
 
             # Sort by effective rate (highest first)
             if comparisons:
@@ -1129,6 +1168,60 @@ class InvestmentCalculator:
                         request.initial_amount,
                         gross_profit,
                     )
+
+                # CDB IPCA investments
+                elif request.investment_type == InvestmentType.CDB_IPCA:
+                    logger.debug("CDB_IPCA investment detected with spread: +%.2f%%", request.ipca_spread or 0.0)
+                    if request.ipca_spread is None:
+                        raise ValueError("IPCA spread is required for CDB_IPCA investments")
+
+                    if request.end_date is None:
+                        raise ValueError("End date must be provided for CDB_IPCA investments")
+
+                    # Get the IPCA rate
+                    try:
+                        ipca_rate = await self.api_client.get_ipca_rate(request.end_date)
+                        logger.debug("Raw IPCA rate from API: %.4f%%", ipca_rate * 100)
+
+                        # Get the spread from the request
+                        ipca_spread = request.ipca_spread
+                        logger.debug("IPCA spread for CDB_IPCA: +%.2f%%", ipca_spread)
+
+                        # For IPCA, we'll use the actual IPCA rate plus the specified spread
+                        annual_rate = ipca_rate + (ipca_spread / 100)  # Convert spread percentage to decimal
+                        rate = annual_rate
+
+                        logger.debug(
+                            "Using IPCA%s rate for CDB_IPCA: %.4f%% (IPCA %.4f%% + %.2f%%)",
+                            f"+{ipca_spread}%" if ipca_spread > 0 else "",
+                            annual_rate * 100,
+                            ipca_rate * 100,
+                            ipca_spread,
+                        )
+
+                        # IPCA uses daily compounding (252 business days per year)
+                        daily_rate = rate / 252
+                        business_days = int(request.period_years * 252)
+                        logger.debug(
+                            "CDB_IPCA daily rate: %.6f%%, business days: %d",
+                            daily_rate * 100,
+                            business_days,
+                        )
+
+                        # Compound interest formula: P * (1 + r)^t - P
+                        gross_profit = (
+                            request.initial_amount * ((1 + daily_rate) ** business_days) - request.initial_amount
+                        )
+                        logger.debug(
+                            "CDB_IPCA calculation: %.2f * ((1 + %.8f) ^ %d) - %.2f = %.2f",
+                            request.initial_amount,
+                            daily_rate,
+                            business_days,
+                            request.initial_amount,
+                            gross_profit,
+                        )
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        logger.error("Error calculating CDB_IPCA investment")
 
                 # Bitcoin investments
                 elif request.investment_type == InvestmentType.BTC:

@@ -106,10 +106,18 @@ function getFormData() {
             data['include_poupanca'] = true;
         }
         else if (selectedType === 'selic') {
-            data['include_selic'] = true;
+            // Only include the flag if no selic_spread is being provided
+            const selicinputVal = document.querySelector('input[name="selic_spread"]');
+            if (!selicinputVal || !selicinputVal.value) {
+                data['include_selic'] = true;
+            }
         }
-        else if (selectedType === 'cdi') {
-            data['include_cdi'] = true;
+        else if (selectedType === 'cdb_ipca') {
+            // Only include the flag if no cdb_ipca_spread is being provided
+            const ipcaInputVal = document.querySelector('input[name="cdb_ipca_spread"]');
+            if (!ipcaInputVal || !ipcaInputVal.value) {
+                data['include_cdb_ipca'] = true;
+            }
         }
         // Get inputs from parameter sections in the investment types container
         const typeItem = document.querySelector(`.investment-type-item[data-id="${selectedType}"]`);

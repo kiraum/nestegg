@@ -14,7 +14,8 @@ function getFriendlyName(typeId) {
         'lci_cdi': 'LCI (% do CDI)',
         'lca_cdi': 'LCA (% do CDI)',
         'lci_ipca': 'LCI (IPCA+)',
-        'lca_ipca': 'LCA (IPCA+)'
+        'lca_ipca': 'LCA (IPCA+)',
+        'cdb_ipca': 'CDB (IPCA+)'
     };
     return nameMap[typeId] || typeId;
 }
@@ -28,7 +29,7 @@ function getInvestmentCategory(typeId) {
     else if (typeId.startsWith('lca')) {
         return 'LCA';
     }
-    else if (typeId === 'cdb' || typeId === 'cdi') {
+    else if (typeId === 'cdb' || typeId === 'cdi' || typeId === 'cdb_ipca') {
         return 'CDB';
     }
     else if (typeId === 'selic' || typeId === 'ipca') {
@@ -58,7 +59,8 @@ function getRateDescription(typeId) {
         'lci_cdi': 'Percentage of CDI',
         'lca_cdi': 'Percentage of CDI',
         'lci_ipca': 'IPCA + spread',
-        'lca_ipca': 'IPCA + spread'
+        'lca_ipca': 'IPCA + spread',
+        'cdb_ipca': 'IPCA + spread'
     };
     return rateDescMap[typeId] || '';
 }
@@ -193,6 +195,14 @@ export function renderInvestmentTypes(types, container, onToggle, selectedTypes 
                             <div class="mb-0">
                                 <label for="${type.id}-spread" class="form-label small">LCA IPCA Spread (%)</label>
                                 <input type="number" class="form-control form-control-sm" id="${type.id}-spread" name="lca_ipca_spread" value="${savedValues['lca_ipca_spread'] !== undefined ? savedValues['lca_ipca_spread'] : '4.0'}" min="0" step="0.1" required>
+                            </div>
+                        `;
+                        break;
+                    case 'cdb_ipca':
+                        inputHTML = `
+                            <div class="mb-0">
+                                <label for="${type.id}-spread" class="form-label small">CDB IPCA Spread (%)</label>
+                                <input type="number" class="form-control form-control-sm" id="${type.id}-spread" name="cdb_ipca_spread" value="${savedValues['cdb_ipca_spread'] !== undefined ? savedValues['cdb_ipca_spread'] : '5.5'}" min="0" step="0.1" required>
                             </div>
                         `;
                         break;
@@ -340,6 +350,14 @@ export function renderSelectedInvestments(selectedTypes, allTypes, container, sa
                     <div class="mb-2">
                         <label for="${typeId}-spread" class="form-label small">LCA IPCA Spread (%)</label>
                         <input type="number" class="form-control form-control-sm" id="${typeId}-spread" name="lca_ipca_spread" value="${savedValues['lca_ipca_spread'] !== undefined ? savedValues['lca_ipca_spread'] : '4.0'}" min="0" step="0.1" required>
+                    </div>
+                `;
+                break;
+            case 'cdb_ipca':
+                inputsContainer.innerHTML = `
+                    <div class="mb-2">
+                        <label for="${typeId}-spread" class="form-label small">CDB IPCA Spread (%)</label>
+                        <input type="number" class="form-control form-control-sm" id="${typeId}-spread" name="cdb_ipca_spread" value="${savedValues['cdb_ipca_spread'] !== undefined ? savedValues['cdb_ipca_spread'] : '5.5'}" min="0" step="0.1" required>
                     </div>
                 `;
                 break;

@@ -6,12 +6,13 @@ export enum InvestmentType {
     SELIC = "selic",
     POUPANCA = "poupanca",
     IPCA = "ipca",
-    CDI = "cdi",
+    CDB_CDI = "cdi",
     BTC = "btc",
     LCI_CDI = "lci_cdi",
     LCA_CDI = "lca_cdi",
     LCI_IPCA = "lci_ipca",
-    LCA_IPCA = "lca_ipca"
+    LCA_IPCA = "lca_ipca",
+    CDB_IPCA = "cdb_ipca"
 }
 
 // Investment type description interface
@@ -81,8 +82,9 @@ export interface ComparisonResult extends InvestmentResponse {
 // Form data interface
 export interface FormData {
     amount: number;
-    start_date: string;
-    end_date: string;
+    start_date?: string;
+    end_date?: string;
+    period?: number;
     cdb_rate?: number;
     lci_rate?: number;
     lca_rate?: number;
@@ -93,8 +95,9 @@ export interface FormData {
     lca_cdi_percentage?: number;
     lci_ipca_spread?: number;
     lca_ipca_spread?: number;
+    cdb_ipca_spread?: number;
     include_poupanca?: boolean;
     include_selic?: boolean;
-    include_cdi?: boolean;
     include_btc?: boolean;
+    include_cdb_ipca?: boolean;
 }

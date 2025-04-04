@@ -7,11 +7,12 @@ export var InvestmentType;
     InvestmentType["SELIC"] = "selic";
     InvestmentType["POUPANCA"] = "poupanca";
     InvestmentType["IPCA"] = "ipca";
-    InvestmentType["CDI"] = "cdi";
+    InvestmentType["CDB_CDI"] = "cdi";
     InvestmentType["BTC"] = "btc";
     InvestmentType["LCI_CDI"] = "lci_cdi";
     InvestmentType["LCA_CDI"] = "lca_cdi";
     InvestmentType["LCI_IPCA"] = "lci_ipca";
     InvestmentType["LCA_IPCA"] = "lca_ipca";
+    InvestmentType["CDB_IPCA"] = "cdb_ipca";
 })(InvestmentType || (InvestmentType = {}));
 //# sourceMappingURL=types.js.map

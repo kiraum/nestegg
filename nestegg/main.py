@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -20,6 +20,7 @@ from .calculator import InvestmentCalculator
 from .config import API_CONFIG, CORS_CONFIG, INVESTMENT_DESCRIPTIONS, setup_logging
 from .external_api import CryptoApiClient
 from .models import (
+    InvestmentComparisonResult,
     InvestmentRequest,
     InvestmentResponse,
     InvestmentType,
@@ -261,150 +262,157 @@ async def calculate_investment(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
-@api_router.post(
-    "/compare",
-    tags=["investments"],
-    summary="Compare different investment types",
-    description="""
-    Compare returns between different investment types and provide recommendations.
+def get_calculator():
+    """Get the initialized calculator instance from app state."""
+    if APP_STATE.calculator is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Calculator not initialized. Please try again later.",
+        )
+    return APP_STATE.calculator
 
-    The comparison includes only investment types that are explicitly requested:
-    * Poupança (only if include_poupanca=true)
-    * SELIC (only if include_selic=true or selic_spread is provided)
-    * IPCA (only if ipca_spread is provided)
-    * CDI (only if include_cdi=true or cdi_percentage is provided)
-    * CDB (only if cdb_rate is provided)
-    * LCI (only if lci_rate is provided)
-    * LCA (only if lca_rate is provided)
-    * LCI_CDI (only if lci_cdi_percentage is provided)
-    * LCA_CDI (only if lca_cdi_percentage is provided)
-    * LCI_IPCA (only if lci_ipca_spread is provided)
-    * LCA_IPCA (only if lca_ipca_spread is provided)
-    * Bitcoin (only if include_btc=true)
 
-    Results are sorted by effective rate and include tax implications.
-    """,
-    response_description="List of investment comparisons with recommendations",
-)
-async def compare_investments(
-    amount: float,
-    start_date: date,  # Required
-    end_date: date,  # Required
-    cdb_rate: Optional[float] = None,
-    lci_rate: Optional[float] = None,
-    lca_rate: Optional[float] = None,
-    ipca_spread: Optional[float] = None,
-    selic_spread: Optional[float] = None,
-    cdi_percentage: Optional[float] = None,
-    lci_cdi_percentage: Optional[float] = None,
-    lca_cdi_percentage: Optional[float] = None,
-    lci_ipca_spread: Optional[float] = None,
-    lca_ipca_spread: Optional[float] = None,
-    include_poupanca: bool = False,
-    include_selic: bool = False,
-    include_cdi: bool = False,
-    include_btc: bool = False,
+@app.get("/api/v1/compare", response_model=list[InvestmentComparisonResult])
+async def compare_investments_endpoint(
+    amount: float = Query(..., description="Amount to invest (R$)"),
+    period: Optional[float] = Query(None, description="Investment period in years"),
+    cdb_rate: Optional[float] = Query(None, description="CDB prefixed annual rate (%)"),
+    lci_rate: Optional[float] = Query(None, description="LCI prefixed annual rate (%)"),
+    lca_rate: Optional[float] = Query(None, description="LCA prefixed annual rate (%)"),
+    ipca_spread: Optional[float] = Query(
+        None, description="Spread to add to IPCA for IPCA+ investments (e.g., 5.5 for IPCA+5.5%)"
+    ),
+    selic_spread: Optional[float] = Query(
+        None, description="Spread to add to SELIC for Tesouro SELIC investments (e.g., 0.2 for SELIC+0.2%)"
+    ),
+    cdi_percentage: Optional[float] = Query(
+        None, description="Percentage of CDI for CDB investment (e.g., 110 for 110% of CDI)"
+    ),
+    lci_cdi_percentage: Optional[float] = Query(
+        None, description="Percentage of CDI for LCI investment (e.g., 93 for 93% of CDI)"
+    ),
+    lca_cdi_percentage: Optional[float] = Query(
+        None, description="Percentage of CDI for LCA investment (e.g., 95 for 95% of CDI)"
+    ),
+    lci_ipca_spread: Optional[float] = Query(
+        None, description="Spread to add to IPCA for LCI_IPCA investment (e.g., 5.5 for IPCA+5.5%)"
+    ),
+    lca_ipca_spread: Optional[float] = Query(
+        None, description="Spread to add to IPCA for LCA_IPCA investment (e.g., 5.5 for IPCA+5.5%)"
+    ),
+    cdb_ipca_spread: Optional[float] = Query(
+        None, description="Spread to add to IPCA for CDB_IPCA investment (e.g., 5.5 for IPCA+5.5%)"
+    ),
+    include_poupanca: bool = Query(False, description="Whether to include Poupança in the comparison"),
+    include_selic: bool = Query(
+        False, description="Whether to include base SELIC (only needed if not providing selic_spread)"
+    ),
+    include_btc: bool = Query(False, description="Whether to include Bitcoin in the comparison"),
+    include_cdb_ipca: bool = Query(
+        False,
+        description="Whether to include CDB_IPCA with default spread (only needed if not providing cdb_ipca_spread)",
+    ),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
 ):
     """
-    Compare different investment types and provide recommendations.
+    Compare different investment types and provide the most profitable option.
 
-    Args:
-        amount: Initial investment amount
-        start_date: Start date for the investment period
-        end_date: End date for the investment period
-        cdb_rate: CDB rate as percentage (e.g., 12.5 for 12.5%)
-        lci_rate: LCI rate as percentage (e.g., 11.0 for 11.0%)
-        lca_rate: LCA rate as percentage (e.g., 10.5 for 10.5%)
-        ipca_spread: Spread to add to IPCA rate in percentage points (e.g., 5.0 for IPCA+5%)
-        selic_spread: Spread to add to SELIC rate in percentage points (e.g., 3.0 for SELIC+3%)
-        cdi_percentage: Percentage of CDI (e.g., 109.0 for 109% of CDI)
-        lci_cdi_percentage: Percentage of CDI for LCI_CDI investment (e.g., 95.0 for 95% of CDI)
-        lca_cdi_percentage: Percentage of CDI for LCA_CDI investment (e.g., 90.0 for 90% of CDI)
-        lci_ipca_spread: Spread to add to IPCA for LCI_IPCA investment (e.g., 4.5 for IPCA+4.5%)
-        lca_ipca_spread: Spread to add to IPCA for LCA_IPCA investment (e.g., 4.0 for IPCA+4.0%)
-        include_poupanca: Whether to include Poupança in the comparison
-        include_selic: Whether to include SELIC in the comparison
-        include_cdi: Whether to include CDI in the comparison
-        include_btc: Whether to include Bitcoin in the comparison
+    This endpoint allows comparing different investment types based on:
+    - Initial investment amount
+    - Time period
+    - Different rates and parameters for investment types
 
-    Returns:
-        List of investment comparisons with recommendations
+    Investment types that can be compared:
+    * Poupança (only if include_poupanca=true)
+    * Tesouro SELIC (if provide selic_spread or include_selic=true)
+    * CDB Prefixado (only if cdb_rate is provided)
+    * CDB CDI (only if cdi_percentage is provided)
+    * LCI Prefixado (only if lci_rate is provided)
+    * LCA Prefixado (only if lca_rate is provided)
+    * LCI CDI (only if lci_cdi_percentage is provided)
+    * LCA CDI (only if lca_cdi_percentage is provided)
+    * Tesouro IPCA+ (only if ipca_spread is provided)
+    * LCI IPCA+ (only if lci_ipca_spread is provided)
+    * LCA IPCA+ (only if lca_ipca_spread is provided)
+    * CDB_IPCA (if provide cdb_ipca_spread or include_cdb_ipca=true)
+    * Bitcoin (only if include_btc=true)
 
-    Raises:
-        HTTPException: If comparison fails or parameters are invalid
+    Returns a list of investment options sorted by most profitable first.
     """
-    try:
-        # Calculate and log the period for information
+    # Set date format description for start_date and end_date
+    if start_date is None:
+        start_date = Query(None, description="Optional start date (format: YYYY-MM-DD)")
+    if end_date is None:
+        end_date = Query(None, description="Optional end date (format: YYYY-MM-DD)")
+
+    # Validate input: either period or both dates must be provided
+    if period is None and (start_date is None or end_date is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Either period or both start_date and end_date must be provided",
+        )
+
+    # If dates are provided but period is not, calculate period
+    if period is None and start_date is not None and end_date is not None:
         days = (end_date - start_date).days
-        period_years = days / 365
-        logger.debug(
-            "Investment period: %.2f years (%d days)",
-            period_years,
-            days,
-        )
+        period = days / 365
+        logger.debug("Calculated period: %.2f years from dates %s to %s", period, start_date, end_date)
 
-        logger.info(
-            "Comparing investments - Amount: R$ %.2f, Period: %.1f years",
-            amount,
-            period_years,
-        )
+    logger.info(
+        "Comparing investments: amount=R$ %.2f, period=%.1f years",
+        amount,
+        period,
+    )
 
-        # Log rate parameters if provided
-        rate_info = []
-        if cdb_rate is not None:
-            rate_info.append(f"CDB: {cdb_rate}%")
-        if lci_rate is not None:
-            rate_info.append(f"LCI: {lci_rate}%")
-        if lca_rate is not None:
-            rate_info.append(f"LCA: {lca_rate}%")
-        if ipca_spread is not None:
-            rate_info.append(f"IPCA+{ipca_spread}%")
-        if selic_spread is not None:
-            rate_info.append(f"SELIC+{selic_spread}%")
-        if cdi_percentage is not None:
-            rate_info.append(f"{cdi_percentage}% of CDI")
-        if include_btc:
-            rate_info.append("BTC: using real prices")
+    # Log rates for investments being compared
+    if cdb_rate is not None:
+        logger.info("CDB Prefixado: %.1f%%", cdb_rate)
+    if lci_rate is not None:
+        logger.info("LCI Prefixado: %.1f%%", lci_rate)
+    if lca_rate is not None:
+        logger.info("LCA Prefixado: %.1f%%", lca_rate)
+    if ipca_spread is not None:
+        logger.info("IPCA+: %.1f%%", ipca_spread)
+    if selic_spread is not None:
+        logger.info("SELIC+: %.1f%%", selic_spread)
+    if cdi_percentage is not None:
+        logger.info("CDB CDI: %.1f%%", cdi_percentage)
+    if lci_cdi_percentage is not None:
+        logger.info("LCI CDI: %.1f%%", lci_cdi_percentage)
+    if lca_cdi_percentage is not None:
+        logger.info("LCA CDI: %.1f%%", lca_cdi_percentage)
+    if lci_ipca_spread is not None:
+        logger.info("LCI IPCA+: %.1f%%", lci_ipca_spread)
+    if lca_ipca_spread is not None:
+        logger.info("LCA IPCA+: %.1f%%", lca_ipca_spread)
+    if cdb_ipca_spread is not None:
+        logger.info("CDB_IPCA: IPCA+%.1f%%", cdb_ipca_spread)
 
-        logger.info("Rates - %s", ", ".join(rate_info) if rate_info else "No specific rates provided")
+    # Log inclusion flags
+    include_info = []
+    if include_poupanca:
+        include_info.append("Poupança")
+    if include_selic:
+        include_info.append("SELIC")
+    if cdi_percentage is not None:
+        include_info.append("CDI")
+    if include_btc:
+        include_info.append("Bitcoin")
+    if include_cdb_ipca:
+        include_info.append("CDB_IPCA")
 
-        # Log additional investment parameters if provided
-        if lci_cdi_percentage is not None:
-            logger.info("LCI_CDI: %.1f%% of CDI", lci_cdi_percentage)
-        if lca_cdi_percentage is not None:
-            logger.info("LCA_CDI: %.1f%% of CDI", lca_cdi_percentage)
-        if lci_ipca_spread is not None:
-            logger.info("LCI_IPCA: IPCA+%.1f%%", lci_ipca_spread)
-        if lca_ipca_spread is not None:
-            logger.info("LCA_IPCA: IPCA+%.1f%%", lca_ipca_spread)
+    if include_info:
+        logger.info("Including: %s", ", ".join(include_info))
 
-        # Log inclusion flags
-        include_info = []
-        if include_poupanca:
-            include_info.append("Poupança")
-        if include_selic:
-            include_info.append("SELIC")
-        if include_cdi:
-            include_info.append("CDI")
-        if include_btc:
-            include_info.append("Bitcoin")
+    try:
+        # Get calculator instance
+        calculator = get_calculator()
 
-        if include_info:
-            logger.info("Including default investments: %s", ", ".join(include_info))
-
-        logger.info("Using date range: %s to %s", start_date, end_date)
-
-        # Use the shared calculator instance instead of creating a new one
-        if APP_STATE.calculator is None:
-            raise HTTPException(
-                status_code=500,
-                detail="Calculator not initialized. Please try again later.",
-            )
-
-        # Call compare_investments with the date parameters
-        results = await APP_STATE.calculator.compare_investments(
+        # Compare investments
+        results = await calculator.compare_investments(
             initial_amount=amount,
-            period_years=period_years,
+            period_years=period,
             cdb_rate=cdb_rate,
             lci_rate=lci_rate,
             lca_rate=lca_rate,
@@ -415,22 +423,41 @@ async def compare_investments(
             lca_cdi_percentage=lca_cdi_percentage,
             lci_ipca_spread=lci_ipca_spread,
             lca_ipca_spread=lca_ipca_spread,
+            cdb_ipca_spread=cdb_ipca_spread,
             include_poupanca=include_poupanca,
             include_selic=include_selic,
-            include_cdi=include_cdi,
             include_btc=include_btc,
+            include_cdb_ipca=include_cdb_ipca,
             start_date_param=start_date,
             end_date_param=end_date,
         )
 
-        return results
-
-    except ValueError as e:
-        logger.error("Validation error: %s", str(e))
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        # Convert to response model and return
+        return [
+            InvestmentComparisonResult(
+                type=result["type"],
+                rate=float(result["rate"]),
+                effective_rate=float(result["effective_rate"]),
+                gross_profit=float(result["gross_profit"]),
+                net_profit=float(result["net_profit"]),
+                tax_amount=float(result["tax_amount"]),
+                final_amount=float(result["final_amount"]),
+                tax_free=bool(result["tax_free"]),
+                fgc_coverage=bool(
+                    result["fgc_coverage"].is_covered
+                    if hasattr(result["fgc_coverage"], "is_covered")
+                    else result["fgc_coverage"]
+                ),
+                recommendation=result.get("recommendation", ""),
+            )
+            for result in results
+        ]
     except Exception as e:
-        logger.error("Unexpected error: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Error comparing investments: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error comparing investments: {str(e)}",
+        ) from e
 
 
 # Include the API router in the main app
