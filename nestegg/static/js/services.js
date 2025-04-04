@@ -142,14 +142,8 @@ export async function compareInvestments(params) {
         if (params.include_poupanca !== undefined) {
             queryParams.append('include_poupanca', params.include_poupanca.toString());
         }
-        if (params.include_selic !== undefined) {
-            queryParams.append('include_selic', params.include_selic.toString());
-        }
         if (params.include_btc !== undefined) {
             queryParams.append('include_btc', params.include_btc.toString());
-        }
-        if (params.include_cdb_ipca !== undefined) {
-            queryParams.append('include_cdb_ipca', params.include_cdb_ipca.toString());
         }
         const url = `/api/v1/compare?${queryParams.toString()}`;
         const response = await fetch(url, {

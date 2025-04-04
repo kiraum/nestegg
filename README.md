@@ -172,11 +172,22 @@ Request parameters:
 - `lca_ipca_spread`: LCA IPCA spread (optional)
 - `cdb_ipca_spread`: CDB IPCA spread (optional)
 - `include_poupanca`: Whether to include Poupança in comparison (optional, default: false)
-- `include_selic`: Whether to include base SELIC in comparison (optional, default: false, only needed if not providing selic_spread)
 - `include_btc`: Whether to include Bitcoin in comparison (optional, default: false)
-- `include_cdb_ipca`: Whether to include CDB_IPCA with default spread (optional, default: false, only needed if not providing cdb_ipca_spread)
 
-The comparison will only include investment types that are explicitly requested through parameters.
+The comparison will include investment types based on the parameters provided:
+- CDB Prefixado will be included when cdb_rate is provided
+- LCI Prefixado will be included when lci_rate is provided
+- LCA Prefixado will be included when lca_rate is provided
+- Tesouro IPCA+ will be included when ipca_spread is provided
+- Tesouro SELIC will be included when selic_spread is provided
+- CDB CDI will be included when cdi_percentage is provided
+- LCI CDI will be included when lci_cdi_percentage is provided
+- LCA CDI will be included when lca_cdi_percentage is provided
+- LCI IPCA+ will be included when lci_ipca_spread is provided
+- LCA IPCA+ will be included when lca_ipca_spread is provided
+- CDB IPCA will be included when cdb_ipca_spread is provided
+- Poupança will be included when include_poupanca=true
+- Bitcoin will be included when include_btc=true
 
 Response:
 ```json
