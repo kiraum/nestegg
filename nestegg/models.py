@@ -31,7 +31,7 @@ class InvestmentType(CaseInsensitiveEnum):
     SELIC = "selic"
     POUPANCA = "poupanca"
     IPCA = "ipca"
-    CDI = "cdi"
+    CDB_CDI = "cdi"  # Renamed from CDI for clarity (CDB with CDI indexation)
     BTC = "btc"
     LCI_CDI = "lci_cdi"
     LCA_CDI = "lca_cdi"

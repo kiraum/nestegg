@@ -31,7 +31,7 @@ INVESTMENT_DESCRIPTIONS: dict[InvestmentType, str] = {
     InvestmentType.LCI: ("LCI Prefixada - Real estate credit note with fixed rate, tax-free"),
     InvestmentType.LCA: ("LCA Prefixada - Agribusiness credit note with fixed rate, tax-free"),
     InvestmentType.IPCA: ("Tesouro IPCA - Government bonds indexed to Brazilian inflation index, can include spread"),
-    InvestmentType.CDI: ("CDB CDI - Bank deposit certificate indexed to Interbank deposit rate, with percentage"),
+    InvestmentType.CDB_CDI: ("CDB CDI - Bank deposit certificate indexed to Interbank deposit rate, with percentage"),
     InvestmentType.BTC: ("Bitcoin (BTC) - Cryptocurrency with user-specified annual growth rate"),
     InvestmentType.LCI_CDI: ("LCI CDI - Tax-free real estate credit note indexed to a percentage of CDI rate"),
     InvestmentType.LCA_CDI: ("LCA CDI - Tax-free agribusiness credit note indexed to a percentage of CDI rate"),

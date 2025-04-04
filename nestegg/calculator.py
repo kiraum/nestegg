@@ -177,7 +177,7 @@ class InvestmentCalculator:
         try:
             # Get current market rates for reference
             selic_rate = await self.api_client.get_selic_rate(target_date)
-            cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDI, target_date)
+            cdi_rate = await self.api_client.get_investment_rate(InvestmentType.CDB_CDI, target_date)
             logger.debug("Current SELIC rate: %.2f%%", selic_rate * 100)
             logger.debug("Current CDI rate: %.2f%%", cdi_rate * 100)
 
@@ -313,7 +313,7 @@ class InvestmentCalculator:
                     percentage = cdi_percentage or 100.0
                     logger.debug("Calculating CDI investment with percentage: %.2f%%", percentage)
                     cdi_request = InvestmentRequest(
-                        investment_type=InvestmentType.CDI,
+                        investment_type=InvestmentType.CDB_CDI,
                         initial_amount=initial_amount,
                         start_date=start_date,
                         end_date=target_date,
@@ -1090,7 +1090,7 @@ class InvestmentCalculator:
                         logger.error("Error calculating IPCA investment")
 
                 # CDI investments
-                elif request.investment_type == InvestmentType.CDI:
+                elif request.investment_type == InvestmentType.CDB_CDI:
                     # Get the CDI rate
                     cdi_rate = await self.api_client.get_cdi_rate(request.end_date)
                     logger.debug("Raw CDI rate from API: %.4f%%", cdi_rate * 100)
