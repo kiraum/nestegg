@@ -10,6 +10,7 @@ A FastAPI application that helps you compare different Brazilian investment inde
   - CDB (Certificado de Depósito Bancário)
     - Fixed-rate CDB (Prefixado)
     - CDI-based CDB (X% of CDI)
+    - IPCA-based CDB (IPCA+X%)
   - LCI (Letra de Crédito Imobiliário, tax-free)
     - Fixed-rate LCI (Prefixado)
     - CDI-based LCI (X% of CDI)
@@ -30,6 +31,10 @@ A FastAPI application that helps you compare different Brazilian investment inde
 - Convenient form reset with New Query button
 - Robust error handling and logging
 - Easy-to-use REST API
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/kiraum/nestegg/main/nestegg/static/img/nestegg.png" alt="NesteEgg Logo" width="300"/>
+</p>
 
 ## Installation
 
@@ -80,7 +85,7 @@ The NestEgg UI is built with TypeScript and requires Node.js to compile the Type
 
 5. Or compare multiple investments at once with:
    ```bash
-   curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+   curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&period=1&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
    ```
 
 ## API Documentation
@@ -112,14 +117,14 @@ Response:
 Calculate investment returns for a single Brazilian investment type.
 
 Request parameters:
-- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`, `lci_cdi`, `lca_cdi`, `lci_ipca`, `lca_ipca`)
+- `investment_type`: Type of investment (`cdb`, `poupanca`, `selic`, `lci`, `lca`, `ipca`, `cdi`, `btc`, `lci_cdi`, `lca_cdi`, `lci_ipca`, `lca_ipca`, `cdb_ipca`)
 - `amount`: Initial investment amount
 - `start_date`: Start date (format: `YYYY-MM-DD`)
 - `end_date`: End date (format: `YYYY-MM-DD`)
 - `cdb_rate`: CDB rate as percentage (required for CDB investments)
 - `lci_rate`: LCI rate as percentage (required for fixed-rate LCI investments)
 - `lca_rate`: LCA rate as percentage (required for fixed-rate LCA investments)
-- `ipca_spread`: IPCA spread in percentage points (optional, default: 0, required for IPCA, LCI_IPCA, LCA_IPCA)
+- `ipca_spread`: IPCA spread in percentage points (optional, default: 0, required for IPCA, LCI_IPCA, LCA_IPCA, CDB_IPCA)
 - `selic_spread`: SELIC spread in percentage points (optional, default: 0)
 - `cdi_percentage`: CDI percentage (optional, default: 100.0, required for CDI, LCI_CDI, LCA_CDI)
 
@@ -146,14 +151,15 @@ Response:
 }
 ```
 
-### POST /api/v1/compare
+### GET /api/v1/compare
 
 Compare returns between different investment types and provide recommendations.
 
 Request parameters:
 - `amount`: Initial investment amount
-- `start_date`: Start date (format: `YYYY-MM-DD`)
-- `end_date`: End date (format: `YYYY-MM-DD`)
+- `period`: Investment period in years (optional if start_date and end_date are provided)
+- `start_date`: Start date (format: `YYYY-MM-DD`, optional if period is provided)
+- `end_date`: End date (format: `YYYY-MM-DD`, optional if period is provided)
 - `cdb_rate`: CDB rate as percentage (optional)
 - `lci_rate`: LCI rate as percentage (optional)
 - `lca_rate`: LCA rate as percentage (optional)
@@ -164,10 +170,11 @@ Request parameters:
 - `lca_cdi_percentage`: LCA CDI percentage (optional)
 - `lci_ipca_spread`: LCI IPCA spread (optional)
 - `lca_ipca_spread`: LCA IPCA spread (optional)
+- `cdb_ipca_spread`: CDB IPCA spread (optional)
 - `include_poupanca`: Whether to include Poupança in comparison (optional, default: false)
-- `include_selic`: Whether to include base SELIC in comparison (optional, default: false)
-- `include_cdi`: Whether to include base CDI in comparison (optional, default: false)
+- `include_selic`: Whether to include base SELIC in comparison (optional, default: false, only needed if not providing selic_spread)
 - `include_btc`: Whether to include Bitcoin in comparison (optional, default: false)
+- `include_cdb_ipca`: Whether to include CDB_IPCA with default spread (optional, default: false, only needed if not providing cdb_ipca_spread)
 
 The comparison will only include investment types that are explicitly requested through parameters.
 
@@ -183,7 +190,6 @@ Response:
     "tax_amount": 0.0,
     "final_amount": 10561.85,
     "tax_free": true,
-    "tax_info": {...},
     "recommendation": "Best option among compared investments"
   },
   {
@@ -195,7 +201,6 @@ Response:
     "tax_amount": 0.0,
     "final_amount": 10531.45,
     "tax_free": true,
-    "tax_info": {...},
     "recommendation": "0.31% lower than LCI 95.00% CDI"
   },
   {
@@ -207,7 +212,6 @@ Response:
     "tax_amount": 194.53,
     "final_amount": 10530.47,
     "tax_free": false,
-    "tax_info": {...},
     "recommendation": "0.32% lower than LCI 95.00% CDI"
   },
   {
@@ -219,7 +223,6 @@ Response:
     "tax_amount": 169.41,
     "final_amount": 10484.59,
     "tax_free": false,
-    "tax_info": {...},
     "recommendation": "0.78% lower than LCI 95.00% CDI"
   },
   {
@@ -231,7 +234,6 @@ Response:
     "tax_amount": 217.70,
     "final_amount": 10482.30,
     "tax_free": false,
-    "tax_info": {...},
     "recommendation": "0.80% lower than LCI 95.00% CDI"
   }
 ]
@@ -251,24 +253,29 @@ Here are some example curl commands for using the API:
 curl -X POST "http://localhost:8001/api/v1/calculate?investment_type=cdb&amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5"
 ```
 
-### Compare multiple investments with custom parameters
+### Compare multiple investments with custom parameters (using period)
 ```bash
-curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&period=1&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+```
+
+### Compare multiple investments with custom parameters (using dates)
+```bash
+curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
 ```
 
 ### Compare investments with different LCI/LCA variants
 ```bash
-curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0&lci_cdi_percentage=95.0&lca_cdi_percentage=90.0&lci_ipca_spread=4.5&lca_ipca_spread=4.0"
+curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&period=1&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0&lci_cdi_percentage=95.0&lca_cdi_percentage=90.0&lci_ipca_spread=4.5&lca_ipca_spread=4.0"
 ```
 
-### Compare investments with specific default types included
+### Compare investments with CDB IPCA and other specific types
 ```bash
-curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2024-01-01&end_date=2024-12-31&lci_rate=13.5&lci_cdi_percentage=94.0&include_poupanca=true&include_btc=true"
+curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&period=1&lci_rate=13.5&lci_cdi_percentage=94.0&cdb_ipca_spread=5.5&include_poupanca=true&include_btc=true"
 ```
 
 ### Compare investments with future dates (projections)
 ```bash
-curl -X POST "http://localhost:8001/api/v1/compare?amount=10000&start_date=2025-01-01&end_date=2025-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
+curl -X GET "http://localhost:8001/api/v1/compare?amount=10000&start_date=2025-01-01&end_date=2025-12-31&cdb_rate=14.5&lci_rate=12.0&lca_rate=11.5&ipca_spread=5.5&selic_spread=2.0&cdi_percentage=109.0"
 ```
 
 ## Data Sources
