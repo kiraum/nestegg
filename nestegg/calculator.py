@@ -252,7 +252,7 @@ class InvestmentCalculator:
                         initial_amount=initial_amount,
                         start_date=start_date,
                         end_date=target_date,
-                        rate=lca_rate / 100,  # Convert from percentage to decimal
+                        lca_rate=lca_rate,
                     )
                     lca_result = await self.calculate_investment(lca_request)
                     comparisons.append(
